@@ -1,0 +1,55 @@
+name: surplus_bite
+description: "SurplusBite: Hyperlocal Food Waste & Surplus Redistribution Network"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Firebase
+  firebase_core: ^4.14.0
+  firebase_auth: ^6.6.1
+  cloud_firestore: ^6.9.0
+  firebase_messaging: ^16.6.0
+  firebase_analytics: ^12.5.0
+  google_sign_in: ^6.2.2
+
+  # Image Upload (Cloudinary - free tier)
+  http: ^1.2.0
+
+  # State Management
+  flutter_riverpod: ^2.5.0
+
+  # UI
+  google_maps_flutter: ^2.10.0
+  cached_network_image: ^4.0.0
+  image_picker: ^1.1.2
+  flutter_image_compress: ^2.3.0
+  flutter_rating_bar: ^4.0.1
+  shimmer: ^4.0.0
+  photo_view: ^0.15.0
+
+  # Location
+  geolocator: ^14.0.3
+  geocoding: ^5.0.0
+
+  # Utilities
+  intl: ^0.20.3
+  timeago: ^3.7.0
+  uuid: ^4.5.0
+  equatable: ^2.0.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
