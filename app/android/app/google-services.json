@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "329801701175",
+    "project_id": "surplusbite-6897c",
+    "storage_bucket": "surplusbite-6897c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:329801701175:android:f970fadd0a4335a2ce2cb2",
+        "android_client_info": {
+          "package_name": "com.surplusbite.surplus_bite"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwLtFnc8APf5mF7n4hbAFzk6Xc0251-3M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
