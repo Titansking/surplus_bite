@@ -19,36 +19,45 @@ class ProviderDashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Dashboard')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            statsAsync.when(
-              data: (stats) => _buildStatsGrid(stats),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Text('Error: $e'),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Recent Listings',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pushNamed(
-                    context,
-                    AppRoutes.createListing,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(providerStatsProvider(user.id));
+          ref.invalidate(providerListingsProvider(user.id));
+          try {
+            await ref.read(providerStatsProvider(user.id).future);
+            await ref.read(providerListingsProvider(user.id).future);
+          } catch (_) {}
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              statsAsync.when(
+                data: (stats) => _buildStatsGrid(stats),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Text('Error: $e'),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Recent Listings',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  child: const Text('+ New Listing'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _RecentListings(providerId: user.id),
-          ],
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.pushNamed(context, AppRoutes.createListing),
+                    child: const Text('+ New Listing'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _RecentListings(providerId: user.id),
+            ],
+          ),
         ),
       ),
     );
@@ -117,10 +126,7 @@ class ProviderDashboardScreen extends ConsumerWidget {
             const SizedBox(height: 2),
             Text(
               title,
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-              ),
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
           ],
         ),

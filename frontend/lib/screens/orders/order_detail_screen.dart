@@ -41,91 +41,103 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     final isProvider = userId == order.providerId;
     final isBuyer = userId == order.buyerId;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          order.listingTitle,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      OrderStatusChip(status: order.status),
-                    ],
-                  ),
-                  const Divider(height: 32),
-                  _buildInfoTile(
-                    Icons.shopping_bag_outlined,
-                    'Quantity',
-                    '${order.quantity} items',
-                  ),
-                  _buildInfoTile(
-                    Icons.attach_money,
-                    'Total Price',
-                    Formatters.currency(order.totalPrice),
-                  ),
-                  _buildInfoTile(
-                    Icons.person_outlined,
-                    isProvider ? 'Buyer' : 'Provider',
-                    isProvider ? order.buyerName : order.providerName,
-                  ),
-                  _buildInfoTile(
-                    Icons.access_time,
-                    'Ordered',
-                    Formatters.dateTime(order.createdAt),
-                  ),
-                  if (order.pickupTime != null)
-                    _buildInfoTile(
-                      Icons.schedule,
-                      'Pickup Time',
-                      Formatters.dateTime(order.pickupTime!),
-                    ),
-                  if (order.cancellationReason != null) ...[
-                    const Divider(),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.error.withOpacity( 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline,
-                              color: AppColors.error, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Cancelled: ${order.cancellationReason}',
-                              style: const TextStyle(
-                                color: AppColors.error,
-                                fontSize: 13,
-                              ),
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(orderDetailProvider(order.id));
+        try {
+          await ref.read(orderDetailProvider(order.id).future);
+        } catch (_) {}
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            order.listingTitle,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                        OrderStatusChip(status: order.status),
+                      ],
                     ),
+                    const Divider(height: 32),
+                    _buildInfoTile(
+                      Icons.shopping_bag_outlined,
+                      'Quantity',
+                      '${order.quantity} items',
+                    ),
+                    _buildInfoTile(
+                      Icons.attach_money,
+                      'Total Price',
+                      Formatters.currency(order.totalPrice),
+                    ),
+                    _buildInfoTile(
+                      Icons.person_outlined,
+                      isProvider ? 'Buyer' : 'Provider',
+                      isProvider ? order.buyerName : order.providerName,
+                    ),
+                    _buildInfoTile(
+                      Icons.access_time,
+                      'Ordered',
+                      Formatters.dateTime(order.createdAt),
+                    ),
+                    if (order.pickupTime != null)
+                      _buildInfoTile(
+                        Icons.schedule,
+                        'Pickup Time',
+                        Formatters.dateTime(order.pickupTime!),
+                      ),
+                    if (order.cancellationReason != null) ...[
+                      const Divider(),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: AppColors.error,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Cancelled: ${order.cancellationReason}',
+                                style: const TextStyle(
+                                  color: AppColors.error,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 24),
-          _buildActionButtons(order, isProvider, isBuyer),
-        ],
+            const SizedBox(height: 24),
+            _buildActionButtons(order, isProvider, isBuyer),
+          ],
+        ),
       ),
     );
   }
@@ -173,8 +185,10 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: AppColors.error),
               ),
-              child: const Text('Decline',
-                  style: TextStyle(color: AppColors.error)),
+              child: const Text(
+                'Decline',
+                style: TextStyle(color: AppColors.error),
+              ),
             ),
           ),
         ],
@@ -205,8 +219,10 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: AppColors.error),
               ),
-              child: const Text('Cancel Order',
-                  style: TextStyle(color: AppColors.error)),
+              child: const Text(
+                'Cancel Order',
+                style: TextStyle(color: AppColors.error),
+              ),
             ),
           ),
         ],
@@ -216,10 +232,9 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
 
   Future<void> _updateStatus(String orderId, String status) async {
     try {
-      await FirebaseFirestore.instance.collection('orders').doc(orderId).update({
-        'status': status,
-        'updatedAt': Timestamp.now(),
-      });
+      await FirebaseFirestore.instance.collection('orders').doc(orderId).update(
+        {'status': status, 'updatedAt': Timestamp.now()},
+      );
       ref.invalidate(orderDetailProvider(orderId));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -232,7 +247,10 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -247,9 +265,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
           title: const Text('Cancel Order'),
           content: TextField(
             controller: controller,
-            decoration: const InputDecoration(
-              labelText: 'Reason (optional)',
-            ),
+            decoration: const InputDecoration(labelText: 'Reason (optional)'),
             maxLines: 2,
           ),
           actions: [
@@ -273,10 +289,12 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
             .collection('orders')
             .doc(orderId)
             .update({
-          'status': 'cancelled',
-          'cancellationReason': reason.isNotEmpty ? reason : 'No reason given',
-          'updatedAt': Timestamp.now(),
-        });
+              'status': 'cancelled',
+              'cancellationReason': reason.isNotEmpty
+                  ? reason
+                  : 'No reason given',
+              'updatedAt': Timestamp.now(),
+            });
         ref.invalidate(orderDetailProvider(orderId));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

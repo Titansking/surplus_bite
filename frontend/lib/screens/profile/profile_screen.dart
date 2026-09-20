@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/theme.dart';
+import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/user_provider.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -26,10 +28,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final user = ref.read(currentUserProvider);
     _nameController = TextEditingController(text: user?.name ?? '');
     _phoneController = TextEditingController(text: user?.phone ?? '');
-    _businessNameController =
-        TextEditingController(text: user?.businessName ?? '');
-    _businessDescController =
-        TextEditingController(text: user?.businessDescription ?? '');
+    _businessNameController = TextEditingController(
+      text: user?.businessName ?? '',
+    );
+    _businessDescController = TextEditingController(
+      text: user?.businessDescription ?? '',
+    );
   }
 
   @override
@@ -39,6 +43,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _businessNameController.dispose();
     _businessDescController.dispose();
     super.dispose();
+  }
+
+  void _syncControllers(UserModel? u) {
+    if (u == null || _isEditing || _isSaving) return;
+    if (_nameController.text != u.name) _nameController.text = u.name;
+    if (_phoneController.text != u.phone) _phoneController.text = u.phone;
+    if (_businessNameController.text != (u.businessName ?? '')) {
+      _businessNameController.text = u.businessName ?? '';
+    }
+    if (_businessDescController.text != (u.businessDescription ?? '')) {
+      _businessDescController.text = u.businessDescription ?? '';
+    }
   }
 
   Future<void> _saveProfile() async {
@@ -59,13 +75,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         data['businessDescription'] = _businessDescController.text.trim();
       }
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.id)
-          .update({
+      await FirebaseFirestore.instance.collection('users').doc(user.id).update({
         ...data,
         'updatedAt': Timestamp.now(),
       });
+
+      ref.read(authProvider.notifier).refreshProfile();
 
       setState(() => _isEditing = false);
 
@@ -80,7 +95,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     } finally {
@@ -90,8 +108,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(currentUserProvider);
-    if (user == null) return const SizedBox.shrink();
+    final snapshotUser = ref.watch(currentUserProvider);
+    if (snapshotUser == null) return const SizedBox.shrink();
+
+    // Live Firestore stream so saves (this page or elsewhere) reflect instantly.
+    final user = ref.watch(userProvider(snapshotUser.id)).value ?? snapshotUser;
+
+    ref.listen<AsyncValue<UserModel?>>(
+      userProvider(snapshotUser.id),
+      (prev, next) => _syncControllers(next.valueOrNull),
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _syncControllers(ref.read(userProvider(snapshotUser.id)).valueOrNull);
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -105,11 +137,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2),
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
                     )
-                  : const Text('Save',
+                  : const Text(
+                      'Save',
                       style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
             )
           else
             IconButton(
@@ -118,91 +156,100 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              CircleAvatar(
-                radius: 50,
-                backgroundColor: AppColors.primary.withOpacity( 0.1),
-                backgroundImage: user.profileImage != null
-                    ? NetworkImage(user.profileImage!)
-                    : null,
-                child: user.profileImage == null
-                    ? Text(
-                        user.name.isNotEmpty
-                            ? user.name[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
-                      )
-                    : null,
-              ),
-              const SizedBox(height: 24),
-              TextFormField(
-                controller: _nameController,
-                enabled: _isEditing,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name',
-                  prefixIcon: Icon(Icons.person_outlined),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(userProvider(user.id));
+          try {
+            await ref.read(userProvider(user.id).future);
+          } catch (_) {}
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                CircleAvatar(
+                  radius: 50,
+                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                  backgroundImage: user.profileImage != null
+                      ? NetworkImage(user.profileImage!)
+                      : null,
+                  child: user.profileImage == null
+                      ? Text(
+                          user.name.isNotEmpty
+                              ? user.name[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        )
+                      : null,
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                initialValue: user.email,
-                enabled: false,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  prefixIcon: Icon(Icons.email_outlined),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _phoneController,
-                enabled: _isEditing,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone',
-                  prefixIcon: Icon(Icons.phone_outlined),
-                ),
-              ),
-              if (user.isProvider) ...[
                 const SizedBox(height: 24),
-                const Divider(),
-                const SizedBox(height: 16),
-                Text(
-                  'Business Details',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 16),
                 TextFormField(
-                  controller: _businessNameController,
+                  controller: _nameController,
                   enabled: _isEditing,
                   decoration: const InputDecoration(
-                    labelText: 'Business Name',
-                    prefixIcon: Icon(Icons.store_outlined),
+                    labelText: 'Full Name',
+                    prefixIcon: Icon(Icons.person_outlined),
                   ),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  controller: _businessDescController,
-                  enabled: _isEditing,
-                  maxLines: 3,
+                  initialValue: user.email,
+                  enabled: false,
                   decoration: const InputDecoration(
-                    labelText: 'Business Description',
-                    prefixIcon: Icon(Icons.description_outlined),
-                    alignLabelWithHint: true,
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.email_outlined),
                   ),
                 ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _phoneController,
+                  enabled: _isEditing,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                  ),
+                ),
+                if (user.isProvider) ...[
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Business Details',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _businessNameController,
+                    enabled: _isEditing,
+                    decoration: const InputDecoration(
+                      labelText: 'Business Name',
+                      prefixIcon: Icon(Icons.store_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _businessDescController,
+                    enabled: _isEditing,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Business Description',
+                      prefixIcon: Icon(Icons.description_outlined),
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
