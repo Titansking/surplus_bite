@@ -6,6 +6,7 @@ import '../../config/routes.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/listing_provider.dart';
 import '../../providers/order_provider.dart';
+import '../../providers/user_provider.dart';
 import '../../widgets/common/listing_card.dart';
 import '../../widgets/common/loading_shimmer.dart';
 
@@ -59,7 +60,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       floatingActionButton: user?.isProvider == true
           ? FloatingActionButton(
-              onPressed: () => Navigator.pushNamed(context, AppRoutes.createListing),
+              onPressed: () =>
+                  Navigator.pushNamed(context, AppRoutes.createListing),
               backgroundColor: AppColors.primary,
               child: const Icon(Icons.add, color: Colors.white),
             )
@@ -72,10 +74,7 @@ class _HomeTab extends ConsumerStatefulWidget {
   final bool showMapView;
   final VoidCallback onToggleView;
 
-  const _HomeTab({
-    required this.showMapView,
-    required this.onToggleView,
-  });
+  const _HomeTab({required this.showMapView, required this.onToggleView});
 
   @override
   ConsumerState<_HomeTab> createState() => _HomeTabState();
@@ -131,8 +130,12 @@ class _HomeTabState extends ConsumerState<_HomeTab> {
                     label: Text(
                       cat,
                       style: TextStyle(
-                        color: isSelected ? Colors.white : AppColors.textSecondary,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        color: isSelected
+                            ? Colors.white
+                            : AppColors.textSecondary,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                         fontSize: 13,
                       ),
                     ),
@@ -172,39 +175,54 @@ class _ListView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final listingsAsync = ref.watch(
-      category == 'All' ? allListingsProvider : categoryListingsProvider(category),
+      category == 'All'
+          ? allListingsProvider
+          : categoryListingsProvider(category),
     );
 
     return listingsAsync.when(
       data: (listings) {
-        if (listings.isEmpty) {
-          return const EmptyStateWidget(
-            icon: Icons.fastfood_outlined,
-            title: 'No Listings Found',
-            subtitle: 'There are no food listings available in your area yet.',
-          );
-        }
         return RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(allListingsProvider);
+            final provider = category == 'All'
+                ? allListingsProvider
+                : categoryListingsProvider(category);
+            ref.invalidate(provider);
+            try {
+              await ref.read(provider.future);
+            } catch (_) {}
           },
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: listings.length,
-            itemBuilder: (context, index) {
-              final listing = listings[index];
-              return ListingCard(
-                listing: listing,
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.listingDetail,
-                    arguments: listing.id,
-                  );
-                },
-              );
-            },
-          ),
+          child: listings.isEmpty
+              ? ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const [
+                    SizedBox(height: 80),
+                    EmptyStateWidget(
+                      icon: Icons.fastfood_outlined,
+                      title: 'No Listings Found',
+                      subtitle:
+                          'There are no food listings available in your area yet.',
+                    ),
+                  ],
+                )
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: listings.length,
+                  itemBuilder: (context, index) {
+                    final listing = listings[index];
+                    return ListingCard(
+                      listing: listing,
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.listingDetail,
+                          arguments: listing.id,
+                        );
+                      },
+                    );
+                  },
+                ),
         );
       },
       loading: () => const LoadingShimmer(),
@@ -261,8 +279,7 @@ class _OrdersTab extends ConsumerWidget {
         ),
         body: TabBarView(
           children: [
-            if (user.isProvider)
-              _ProviderOrdersList(providerId: user.id),
+            if (user.isProvider) _ProviderOrdersList(providerId: user.id),
             _BuyerOrdersList(buyerId: user.id),
           ],
         ),
@@ -280,34 +297,50 @@ class _ProviderOrdersList extends ConsumerWidget {
     final ordersAsync = ref.watch(providerOrdersProvider(providerId));
     return ordersAsync.when(
       data: (orders) {
-        if (orders.isEmpty) {
-          return const EmptyStateWidget(
-            icon: Icons.receipt_long_outlined,
-            title: 'No Incoming Orders',
-            subtitle: 'Orders from consumers will appear here.',
-          );
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.all(8),
-          itemCount: orders.length,
-          itemBuilder: (context, index) {
-            final order = orders[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                title: Text(order.listingTitle),
-                subtitle: Text('By ${order.buyerName}'),
-                trailing: Text('\$${order.totalPrice.toStringAsFixed(2)}'),
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.orderDetail,
-                    arguments: order.id,
-                  );
-                },
-              ),
-            );
+        return RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(providerOrdersProvider(providerId));
+            try {
+              await ref.read(providerOrdersProvider(providerId).future);
+            } catch (_) {}
           },
+          child: orders.isEmpty
+              ? ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const [
+                    SizedBox(height: 80),
+                    EmptyStateWidget(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'No Incoming Orders',
+                      subtitle: 'Orders from consumers will appear here.',
+                    ),
+                  ],
+                )
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(8),
+                  itemCount: orders.length,
+                  itemBuilder: (context, index) {
+                    final order = orders[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        title: Text(order.listingTitle),
+                        subtitle: Text('By ${order.buyerName}'),
+                        trailing: Text(
+                          '\$${order.totalPrice.toStringAsFixed(2)}',
+                        ),
+                        onTap: () {
+                          Navigator.pushNamed(
+                            context,
+                            AppRoutes.orderDetail,
+                            arguments: order.id,
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
         );
       },
       loading: () => const LoadingShimmer(height: 80),
@@ -325,34 +358,51 @@ class _BuyerOrdersList extends ConsumerWidget {
     final ordersAsync = ref.watch(buyerOrdersProvider(buyerId));
     return ordersAsync.when(
       data: (orders) {
-        if (orders.isEmpty) {
-          return const EmptyStateWidget(
-            icon: Icons.shopping_bag_outlined,
-            title: 'No Orders Yet',
-            subtitle: 'Browse listings and reserve food to get started!',
-          );
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.all(8),
-          itemCount: orders.length,
-          itemBuilder: (context, index) {
-            final order = orders[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                title: Text(order.listingTitle),
-                subtitle: Text('From ${order.providerName}'),
-                trailing: Text('\$${order.totalPrice.toStringAsFixed(2)}'),
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.orderDetail,
-                    arguments: order.id,
-                  );
-                },
-              ),
-            );
+        return RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(buyerOrdersProvider(buyerId));
+            try {
+              await ref.read(buyerOrdersProvider(buyerId).future);
+            } catch (_) {}
           },
+          child: orders.isEmpty
+              ? ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const [
+                    SizedBox(height: 80),
+                    EmptyStateWidget(
+                      icon: Icons.shopping_bag_outlined,
+                      title: 'No Orders Yet',
+                      subtitle:
+                          'Browse listings and reserve food to get started!',
+                    ),
+                  ],
+                )
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(8),
+                  itemCount: orders.length,
+                  itemBuilder: (context, index) {
+                    final order = orders[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        title: Text(order.listingTitle),
+                        subtitle: Text('From ${order.providerName}'),
+                        trailing: Text(
+                          '\$${order.totalPrice.toStringAsFixed(2)}',
+                        ),
+                        onTap: () {
+                          Navigator.pushNamed(
+                            context,
+                            AppRoutes.orderDetail,
+                            arguments: order.id,
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
         );
       },
       loading: () => const LoadingShimmer(height: 80),
@@ -364,8 +414,11 @@ class _BuyerOrdersList extends ConsumerWidget {
 class _ProfileTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(currentUserProvider);
-    if (user == null) return const SizedBox.shrink();
+    final snapshotUser = ref.watch(currentUserProvider);
+    if (snapshotUser == null) return const SizedBox.shrink();
+
+    // Use the live Firestore stream so profile updates show immediately.
+    final user = ref.watch(userProvider(snapshotUser.id)).value ?? snapshotUser;
 
     return Scaffold(
       appBar: AppBar(
@@ -377,128 +430,140 @@ class _ProfileTab extends ConsumerWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            CircleAvatar(
-              radius: 50,
-              backgroundColor: AppColors.primary.withOpacity( 0.1),
-              backgroundImage: user.profileImage != null
-                  ? NetworkImage(user.profileImage!)
-                  : null,
-              child: user.profileImage == null
-                  ? Text(
-                      user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-                      style: const TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              user.name,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(userProvider(user.id));
+          try {
+            await ref.read(userProvider(user.id).future);
+          } catch (_) {}
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              CircleAvatar(
+                radius: 50,
+                backgroundColor: AppColors.primary.withOpacity(0.1),
+                backgroundImage: user.profileImage != null
+                    ? NetworkImage(user.profileImage!)
+                    : null,
+                child: user.profileImage == null
+                    ? Text(
+                        user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                        style: const TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : null,
               ),
-            ),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: user.isProvider
-                    ? AppColors.accent.withOpacity( 0.1)
-                    : user.isNGO
-                        ? AppColors.completed.withOpacity( 0.1)
-                        : AppColors.primary.withOpacity( 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                user.isProvider
-                    ? 'Food Provider'
-                    : user.isNGO
-                        ? 'NGO / Volunteer'
-                        : 'Consumer',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: user.isProvider
-                      ? AppColors.accent
-                      : user.isNGO
-                          ? AppColors.completed
-                          : AppColors.primary,
+              const SizedBox(height: 16),
+              Text(
+                user.name,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            if (user.isProvider) ...[
-              _ProfileMenuItem(
-                icon: Icons.dashboard_outlined,
-                title: 'Provider Dashboard',
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.providerDashboard),
-              ),
-            ],
-            _ProfileMenuItem(
-              icon: Icons.favorite_outline,
-              title: 'Favorites',
-              onTap: () {
-                // TODO: Implement favorites screen
-              },
-            ),
-            _ProfileMenuItem(
-              icon: Icons.chat_outlined,
-              title: 'Messages',
-              onTap: () => Navigator.pushNamed(context, AppRoutes.chat),
-            ),
-            _ProfileMenuItem(
-              icon: Icons.info_outline,
-              title: 'About SurplusBite',
-              onTap: () {
-                showAboutDialog(
-                  context: context,
-                  applicationName: 'SurplusBite',
-                  applicationVersion: '1.0.0',
-                  applicationIcon: const Icon(
-                    Icons.eco,
-                    size: 48,
-                    color: AppColors.primary,
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: user.isProvider
+                      ? AppColors.accent.withOpacity(0.1)
+                      : user.isNGO
+                      ? AppColors.completed.withOpacity(0.1)
+                      : AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  user.isProvider
+                      ? 'Food Provider'
+                      : user.isNGO
+                      ? 'NGO / Volunteer'
+                      : 'Consumer',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: user.isProvider
+                        ? AppColors.accent
+                        : user.isNGO
+                        ? AppColors.completed
+                        : AppColors.primary,
                   ),
-                  children: [
-                    const Text(
-                      'Hyperlocal Food Waste & Surplus Redistribution Network',
+                ),
+              ),
+              const SizedBox(height: 24),
+              if (user.isProvider) ...[
+                _ProfileMenuItem(
+                  icon: Icons.dashboard_outlined,
+                  title: 'Provider Dashboard',
+                  onTap: () =>
+                      Navigator.pushNamed(context, AppRoutes.providerDashboard),
+                ),
+              ],
+              _ProfileMenuItem(
+                icon: Icons.favorite_outline,
+                title: 'Favorites',
+                onTap: () {
+                  // TODO: Implement favorites screen
+                },
+              ),
+              _ProfileMenuItem(
+                icon: Icons.chat_outlined,
+                title: 'Messages',
+                onTap: () => Navigator.pushNamed(context, AppRoutes.chat),
+              ),
+              _ProfileMenuItem(
+                icon: Icons.info_outline,
+                title: 'About SurplusBite',
+                onTap: () {
+                  showAboutDialog(
+                    context: context,
+                    applicationName: 'SurplusBite',
+                    applicationVersion: '1.0.0',
+                    applicationIcon: const Icon(
+                      Icons.eco,
+                      size: 48,
+                      color: AppColors.primary,
                     ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  ref.read(authProvider.notifier).signOut();
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/login',
-                    (route) => false,
+                    children: [
+                      const Text(
+                        'Hyperlocal Food Waste & Surplus Redistribution Network',
+                      ),
+                    ],
                   );
                 },
-                icon: const Icon(Icons.logout, color: AppColors.error),
-                label: const Text(
-                  'Sign Out',
-                  style: TextStyle(color: AppColors.error),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.error),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    ref.read(authProvider.notifier).signOut();
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/login',
+                      (route) => false,
+                    );
+                  },
+                  icon: const Icon(Icons.logout, color: AppColors.error),
+                  label: const Text(
+                    'Sign Out',
+                    style: TextStyle(color: AppColors.error),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.error),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

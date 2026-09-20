@@ -11,17 +11,9 @@ class AuthState {
   final UserModel? user;
   final String? error;
 
-  const AuthState({
-    this.status = AuthStatus.initial,
-    this.user,
-    this.error,
-  });
+  const AuthState({this.status = AuthStatus.initial, this.user, this.error});
 
-  AuthState copyWith({
-    AuthStatus? status,
-    UserModel? user,
-    String? error,
-  }) {
+  AuthState copyWith({AuthStatus? status, UserModel? user, String? error}) {
     return AuthState(
       status: status ?? this.status,
       user: user ?? this.user,
@@ -35,7 +27,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final FirestoreService _firestoreService;
 
   AuthNotifier(this._authService, this._firestoreService)
-      : super(const AuthState()) {
+    : super(const AuthState()) {
     _init();
   }
 
@@ -63,20 +55,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
           }
 
           debugPrint('AUTH: profile fetched: true');
-          state = AuthState(
-            status: AuthStatus.authenticated,
-            user: userModel,
-          );
+          state = AuthState(status: AuthStatus.authenticated, user: userModel);
         } else {
           debugPrint('AUTH: user == null');
           state = const AuthState(status: AuthStatus.unauthenticated);
         }
       } catch (e) {
         debugPrint('AUTH: error $e');
-        state = AuthState(
-          status: AuthStatus.error,
-          error: e.toString(),
-        );
+        state = AuthState(status: AuthStatus.error, error: e.toString());
       }
     });
   }
@@ -89,10 +75,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       debugPrint('SIGNIN: signInWithEmail completed');
     } catch (e) {
       debugPrint('SIGNIN: error $e');
-      state = AuthState(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = AuthState(status: AuthStatus.error, error: e.toString());
     }
   }
 
@@ -105,10 +88,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
     } catch (e) {
-      state = AuthState(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = AuthState(status: AuthStatus.error, error: e.toString());
     }
   }
 
@@ -120,7 +100,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
   ) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
-      final credential = await _authService.signUpWithEmail(email, password, name);
+      final credential = await _authService.signUpWithEmail(
+        email,
+        password,
+        name,
+      );
       final now = DateTime.now();
       final user = UserModel(
         id: credential.user!.uid,
@@ -132,10 +116,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       await _authService.createFirestoreUser(user);
     } catch (e) {
-      state = AuthState(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = AuthState(status: AuthStatus.error, error: e.toString());
     }
   }
 
@@ -149,13 +130,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _firestoreService.updateUser(state.user!.id, data);
   }
 
+  Future<void> refreshProfile() async {
+    final uid = state.user?.id;
+    if (uid == null) return;
+    try {
+      final fresh = await _firestoreService.getUserProfile(uid);
+      if (fresh != null && mounted) {
+        state = state.copyWith(user: fresh);
+      }
+    } catch (e) {
+      debugPrint('AUTH: refreshProfile error $e');
+    }
+  }
+
   UserModel? get currentUser => state.user;
   bool get isProvider => state.user?.isProvider ?? false;
   bool get isNGO => state.user?.isNGO ?? false;
 }
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
-final firestoreServiceProvider = Provider<FirestoreService>((ref) => FirestoreService());
+final firestoreServiceProvider = Provider<FirestoreService>(
+  (ref) => FirestoreService(),
+);
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(
