@@ -33,6 +33,64 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _forgotPassword() async {
+    final emailController = TextEditingController(
+      text: _emailController.text.trim(),
+    );
+    final formKey = GlobalKey<FormState>();
+    final sent = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Reset Password'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: emailController,
+              validator: Validators.email,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                prefixIcon: Icon(Icons.email_outlined),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(dialogContext, true);
+                }
+              },
+              child: const Text('Send Link'),
+            ),
+          ],
+        );
+      },
+    );
+    if (sent != true || !mounted) return;
+
+    final ok = await ref
+        .read(authProvider.notifier)
+        .resetPassword(emailController.text.trim());
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Password reset link sent to ${emailController.text.trim()}.'
+              : 'Failed to send reset link. Please try again.',
+        ),
+        backgroundColor: ok ? AppColors.success : AppColors.error,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
@@ -64,13 +122,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity( 0.1),
+                      color: AppColors.primary.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.eco,
-                      size: 64,
-                      color: AppColors.primary,
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/food-safety.png',
+                        width: 64,
+                        height: 64,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -122,9 +183,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {
-                        // TODO: Forgot password
-                      },
+                      onPressed: _forgotPassword,
                       child: const Text('Forgot Password?'),
                     ),
                   ),

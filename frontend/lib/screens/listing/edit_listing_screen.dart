@@ -82,6 +82,7 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
       lastDate: DateTime.now().add(const Duration(days: 7)),
     );
     if (date != null) {
+      if (!mounted) return;
       final time = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.fromDateTime(current ?? DateTime.now()),
@@ -107,6 +108,7 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
       lastDate: DateTime.now().add(const Duration(days: 30)),
     );
     if (date != null) {
+      if (!mounted) return;
       final time = await showTimePicker(
         context: context,
         initialTime: TimeOfDay(hour: 23, minute: 59),
@@ -228,7 +230,7 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _selectedCategory,
+                initialValue: _selectedCategory,
                 decoration: const InputDecoration(labelText: 'Category'),
                 items: AppConstants.categories.where((c) => c != 'All').map(
                   (c) => DropdownMenuItem(value: c, child: Text(c)),
@@ -275,7 +277,7 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _selectedUnit,
+                      initialValue: _selectedUnit,
                       decoration: const InputDecoration(labelText: 'Unit'),
                       items: AppConstants.units.map(
                         (u) => DropdownMenuItem(value: u, child: Text(u)),
@@ -364,8 +366,11 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
                       selected: sel,
                       onSelected: (s) {
                         setState(() {
-                          if (s) _selectedDietaryTags.add(tag);
-                          else _selectedDietaryTags.remove(tag);
+                          if (s) {
+                            _selectedDietaryTags.add(tag);
+                          } else {
+                            _selectedDietaryTags.remove(tag);
+                          }
                         });
                       },
                     );

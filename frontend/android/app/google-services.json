@@ -12,7 +12,20 @@
           "package_name": "com.surplusbite.surplus_bite"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "329801701175-45qmo0r15e10dc17nmdpn6ecsu61f0c7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.surplusbite.surplus_bite",
+            "certificate_hash": "bfb861876f87e7955e4eb07acb5defc32b00cf5d"
+          }
+        },
+        {
+          "client_id": "329801701175-9dvcttg4lfq43tgpqotcok9v1ommduk7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBwLtFnc8APf5mF7n4hbAFzk6Xc0251-3M"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "329801701175-9dvcttg4lfq43tgpqotcok9v1ommduk7.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "329801701175-io7e85bonnngafc51o2a8rfuofpdifs4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.surplusbite.surplusBite"
+              }
+            }
+          ]
         }
       }
     }

@@ -12,17 +12,11 @@ import 'package:surplus_bite/services/auth_service.dart';
 import 'package:surplus_bite/services/firestore_service.dart';
 
 class FakeAuthService implements AuthService {
-  FakeAuthService({
-    Stream<User?> Function()? authStateListener,
-    void Function(String email, String password)? onSignIn,
-    void Function(String email, String password, String name)? onSignUp,
-  })  : _authStateListener = authStateListener,
-        _onSignIn = onSignIn,
-        _onSignUp = onSignUp;
+  FakeAuthService({this.authStateListener, this.onSignIn, this.onSignUp});
 
-  final Stream<User?> Function()? _authStateListener;
-  final void Function(String email, String password)? _onSignIn;
-  final void Function(String email, String password, String name)? _onSignUp;
+  final Stream<User?> Function()? authStateListener;
+  final void Function(String email, String password)? onSignIn;
+  final void Function(String email, String password, String name)? onSignUp;
 
   @override
   User? get currentUser => null;
@@ -32,13 +26,11 @@ class FakeAuthService implements AuthService {
 
   @override
   Stream<User?> get authStateChanges =>
-      _authStateListener?.call() ?? const Stream.empty();
+      authStateListener?.call() ?? const Stream.empty();
 
   @override
   Future<UserCredential> signInWithEmail(String email, String password) async {
-    if (_onSignIn != null) {
-      _onSignIn(email, password);
-    }
+    onSignIn?.call(email, password);
     throw UnimplementedError('signInWithEmail is not exercised in this test');
   }
 
@@ -53,9 +45,7 @@ class FakeAuthService implements AuthService {
     String password,
     String name,
   ) async {
-    if (_onSignUp != null) {
-      _onSignUp(email, password, name);
-    }
+    onSignUp?.call(email, password, name);
     throw UnimplementedError('signUpWithEmail is not exercised in this test');
   }
 

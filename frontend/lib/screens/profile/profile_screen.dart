@@ -5,6 +5,7 @@ import '../../config/theme.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
+import '../../widgets/common/account_switcher.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -129,6 +130,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       appBar: AppBar(
         title: const Text('Profile'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.switch_account),
+            tooltip: 'Switch account',
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              showDragHandle: true,
+              builder: (_) => const AccountSwitcherSheet(),
+            ),
+          ),
           if (_isEditing)
             TextButton(
               onPressed: _isSaving ? null : _saveProfile,
@@ -172,7 +182,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               children: [
                 CircleAvatar(
                   radius: 50,
-                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                   backgroundImage: user.profileImage != null
                       ? NetworkImage(user.profileImage!)
                       : null,

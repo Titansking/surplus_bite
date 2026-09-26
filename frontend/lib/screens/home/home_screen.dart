@@ -7,6 +7,8 @@ import '../../providers/auth_provider.dart';
 import '../../providers/listing_provider.dart';
 import '../../providers/order_provider.dart';
 import '../../providers/user_provider.dart';
+import '../../utils/formatters.dart';
+import '../../widgets/common/account_switcher.dart';
 import '../../widgets/common/listing_card.dart';
 import '../../widgets/common/loading_shimmer.dart';
 
@@ -90,7 +92,11 @@ class _HomeTabState extends ConsumerState<_HomeTab> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.eco, color: Colors.white, size: 28),
+            Image.asset(
+              'assets/images/food-safety.png',
+              width: 28,
+              height: 28,
+            ),
             const SizedBox(width: 8),
             Text(
               'SurplusBite',
@@ -100,9 +106,7 @@ class _HomeTabState extends ConsumerState<_HomeTab> {
         ),
         actions: [
           IconButton(
-            onPressed: () {
-              // TODO: Implement search
-            },
+            onPressed: () => Navigator.pushNamed(context, AppRoutes.search),
             icon: const Icon(Icons.search),
           ),
           IconButton(
@@ -122,7 +126,7 @@ class _HomeTabState extends ConsumerState<_HomeTab> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 scrollDirection: Axis.horizontal,
                 itemCount: AppConstants.categories.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
                   final cat = AppConstants.categories[index];
                   final isSelected = _selectedCategory == cat;
@@ -179,6 +183,10 @@ class _ListView extends ConsumerWidget {
           ? allListingsProvider
           : categoryListingsProvider(category),
     );
+    final currentUserId = ref.watch(currentUserProvider)?.id;
+    final favoriteIds = currentUserId == null
+        ? const <String>{}
+        : ref.watch(favoritesNotifierProvider(currentUserId));
 
     return listingsAsync.when(
       data: (listings) {
@@ -213,6 +221,12 @@ class _ListView extends ConsumerWidget {
                     final listing = listings[index];
                     return ListingCard(
                       listing: listing,
+                      isFavorite: favoriteIds.contains(listing.id),
+                      onFavoriteToggle: currentUserId == null
+                          ? null
+                          : () => ref
+                              .read(favoritesNotifierProvider(currentUserId).notifier)
+                              .toggleFavorite(listing.id),
                       onTap: () {
                         Navigator.pushNamed(
                           context,
@@ -328,7 +342,7 @@ class _ProviderOrdersList extends ConsumerWidget {
                         title: Text(order.listingTitle),
                         subtitle: Text('By ${order.buyerName}'),
                         trailing: Text(
-                          '\$${order.totalPrice.toStringAsFixed(2)}',
+                          Formatters.currency(order.totalPrice),
                         ),
                         onTap: () {
                           Navigator.pushNamed(
@@ -390,7 +404,7 @@ class _BuyerOrdersList extends ConsumerWidget {
                         title: Text(order.listingTitle),
                         subtitle: Text('From ${order.providerName}'),
                         trailing: Text(
-                          '\$${order.totalPrice.toStringAsFixed(2)}',
+                          Formatters.currency(order.totalPrice),
                         ),
                         onTap: () {
                           Navigator.pushNamed(
@@ -425,6 +439,15 @@ class _ProfileTab extends ConsumerWidget {
         title: const Text('Profile'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.switch_account),
+            tooltip: 'Switch account',
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              showDragHandle: true,
+              builder: (_) => const AccountSwitcherSheet(),
+            ),
+          ),
+          IconButton(
             onPressed: () => Navigator.pushNamed(context, AppRoutes.profile),
             icon: const Icon(Icons.settings_outlined),
           ),
@@ -444,7 +467,7 @@ class _ProfileTab extends ConsumerWidget {
             children: [
               CircleAvatar(
                 radius: 50,
-                backgroundColor: AppColors.primary.withOpacity(0.1),
+                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                 backgroundImage: user.profileImage != null
                     ? NetworkImage(user.profileImage!)
                     : null,
@@ -475,10 +498,10 @@ class _ProfileTab extends ConsumerWidget {
                 ),
                 decoration: BoxDecoration(
                   color: user.isProvider
-                      ? AppColors.accent.withOpacity(0.1)
+                      ? AppColors.accent.withValues(alpha: 0.1)
                       : user.isNGO
-                      ? AppColors.completed.withOpacity(0.1)
-                      : AppColors.primary.withOpacity(0.1),
+                      ? AppColors.completed.withValues(alpha: 0.1)
+                      : AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -510,9 +533,7 @@ class _ProfileTab extends ConsumerWidget {
               _ProfileMenuItem(
                 icon: Icons.favorite_outline,
                 title: 'Favorites',
-                onTap: () {
-                  // TODO: Implement favorites screen
-                },
+                onTap: () => Navigator.pushNamed(context, AppRoutes.favorites),
               ),
               _ProfileMenuItem(
                 icon: Icons.chat_outlined,
@@ -527,10 +548,13 @@ class _ProfileTab extends ConsumerWidget {
                     context: context,
                     applicationName: 'SurplusBite',
                     applicationVersion: '1.0.0',
-                    applicationIcon: const Icon(
-                      Icons.eco,
-                      size: 48,
-                      color: AppColors.primary,
+                    applicationIcon: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Image.asset(
+                        'assets/images/food-safety.png',
+                        fit: BoxFit.cover,
+                      ),
                     ),
                     children: [
                       const Text(

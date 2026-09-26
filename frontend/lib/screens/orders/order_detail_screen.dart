@@ -81,7 +81,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                       '${order.quantity} items',
                     ),
                     _buildInfoTile(
-                      Icons.attach_money,
+                      Icons.currency_rupee,
                       'Total Price',
                       Formatters.currency(order.totalPrice),
                     ),
@@ -106,7 +106,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.error.withOpacity(0.1),
+                          color: AppColors.error.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(

@@ -4,7 +4,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Formatters {
   static String currency(double amount) {
-    return NumberFormat.currency(symbol: '₹', decimalDigits: 2).format(amount);
+    return NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 2,
+    ).format(amount);
   }
 
   static String date(DateTime date) {
