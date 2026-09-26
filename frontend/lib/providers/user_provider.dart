@@ -16,6 +16,14 @@ final favoritesProvider =
   return firestoreService.getUserFavorites(userId);
 });
 
+final favoritesNotifierProvider =
+    StateNotifierProvider.family<FavoriteNotifier, Set<String>, String>((
+  ref,
+  userId,
+) {
+  return FavoriteNotifier(ref.watch(firestoreServiceProvider), userId);
+});
+
 class FavoriteNotifier extends StateNotifier<Set<String>> {
   final FirestoreService _firestoreService;
   final String _userId;

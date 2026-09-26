@@ -43,6 +43,7 @@ dependencies:
   timeago: ^3.7.1
   uuid: ^4.6.0
   equatable: ^3.0.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:
@@ -53,6 +54,19 @@ dev_dependencies:
   cloud_firestore_platform_interface: ^8.0.7
   firebase_core_platform_interface: ^8.1.1
   firebase_messaging_platform_interface: ^4.10.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/food-safety.png"
+  remove_alpha_ios: true
+  min_sdk_android: 24
+  adaptive_icon_background: "#2E7D32"
+  adaptive_icon_foreground: "assets/images/food-safety.png"
+  web:
+    generate: true
+    image_path: "assets/images/food-safety.png"
 
 flutter:
   uses-material-design: true

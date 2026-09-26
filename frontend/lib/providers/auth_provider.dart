@@ -1,6 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/local_account.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
@@ -26,8 +31,9 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthService _authService;
   final FirestoreService _firestoreService;
+  final AccountsNotifier _accounts;
 
-  AuthNotifier(this._authService, this._firestoreService)
+  AuthNotifier(this._authService, this._firestoreService, this._accounts)
     : super(const AuthState()) {
     _init();
   }
@@ -54,6 +60,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
             );
             await _authService.createFirestoreUser(userModel);
           }
+
+          _accounts.upsert(
+            LocalAccount(
+              uid: user.uid,
+              email: user.email ?? '',
+              name: user.displayName ?? userModel.name,
+              photoUrl: user.photoURL,
+              provider: user.providerData.isNotEmpty
+                  ? user.providerData.first.providerId
+                  : 'password',
+            ),
+          );
 
           debugPrint('AUTH: profile fetched: true');
           state = AuthState(status: AuthStatus.authenticated, user: userModel);
@@ -90,6 +108,46 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
     } catch (e) {
       state = AuthState(status: AuthStatus.error, error: e.toString());
+    }
+  }
+
+  Future<void> switchGoogleAccount() async {
+    final previous = state;
+    state = state.copyWith(status: AuthStatus.loading);
+    try {
+      await _authService.signInWithGoogle();
+    } catch (e) {
+      final isCancel =
+          e is GoogleSignInException &&
+          e.code == GoogleSignInExceptionCode.canceled;
+      state = isCancel
+          ? previous.copyWith(status: AuthStatus.authenticated)
+          : AuthState(status: AuthStatus.error, error: e.toString());
+    }
+  }
+
+  Future<void> switchToEmailAccount(String email, String password) async {
+    state = state.copyWith(status: AuthStatus.loading);
+    try {
+      await _authService.signInWithEmail(email, password);
+    } catch (e) {
+      state = AuthState(status: AuthStatus.error, error: e.toString());
+    }
+  }
+
+  List<LocalAccount> get accounts => _accounts.state;
+
+  void removeLocalAccount(String uid) {
+    _accounts.remove(uid);
+  }
+
+  Future<bool> resetPassword(String email) async {
+    try {
+      await _authService.resetPassword(email);
+      return true;
+    } catch (e) {
+      state = AuthState(status: AuthStatus.error, error: e.toString());
+      return false;
     }
   }
 
@@ -154,10 +212,72 @@ final firestoreServiceProvider = Provider<FirestoreService>(
   (ref) => FirestoreService(),
 );
 
+class LocalAccountsStore {
+  LocalAccountsStore([this._sp]);
+
+  final SharedPreferences? _sp;
+  String? _cache;
+  static const _key = 'local_accounts_v1';
+
+  String? read() => _sp?.getString(_key) ?? _cache;
+
+  Future<void> write(String value) async {
+    _cache = value;
+    await _sp?.setString(_key, value);
+  }
+}
+
+final sharedPreferencesProvider = Provider<SharedPreferences?>((ref) => null);
+
+final localAccountsStoreProvider = Provider<LocalAccountsStore>((ref) {
+  return LocalAccountsStore(ref.watch(sharedPreferencesProvider));
+});
+
+class AccountsNotifier extends StateNotifier<List<LocalAccount>> {
+  AccountsNotifier(this._store) : super(const []) {
+    _load();
+  }
+
+  final LocalAccountsStore _store;
+
+  Future<void> _load() async {
+    final raw = _store.read();
+    if (raw == null) return;
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      state = decoded
+          .map((e) => LocalAccount.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      // Corrupted registry: fall back to an empty list.
+    }
+  }
+
+  void upsert(LocalAccount account) {
+    state = [account, ...state.where((a) => a.uid != account.uid)];
+    _persist();
+  }
+
+  void remove(String uid) {
+    state = state.where((a) => a.uid != uid).toList();
+    _persist();
+  }
+
+  void _persist() {
+    _store.write(jsonEncode(state.map((e) => e.toJson()).toList()));
+  }
+}
+
+final accountsProvider =
+    StateNotifierProvider<AccountsNotifier, List<LocalAccount>>((ref) {
+  return AccountsNotifier(ref.watch(localAccountsStoreProvider));
+});
+
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(
-    ref.watch(authServiceProvider),
-    ref.watch(firestoreServiceProvider),
+    ref.read(authServiceProvider),
+    ref.read(firestoreServiceProvider),
+    ref.read(accountsProvider.notifier),
   );
 });
 

@@ -22,7 +22,7 @@ void main() {
       );
 
       await tester.pump();
-      expect(find.byIcon(Icons.eco), findsWidgets);
+      expect(find.byType(Image), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     },
   );

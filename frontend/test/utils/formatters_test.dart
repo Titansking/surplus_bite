@@ -8,6 +8,10 @@ void main() {
       expect(Formatters.currency(120), '₹120.00');
       expect(Formatters.currency(0), '₹0.00');
     });
+
+    test('uses Indian digit grouping', () {
+      expect(Formatters.currency(1234567.5), '₹12,34,567.50');
+    });
   });
 
   group('date/time', () {

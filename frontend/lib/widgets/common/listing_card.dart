@@ -40,12 +40,12 @@ class ListingCard extends StatelessWidget {
                       ? CachedNetworkImage(
                           imageUrl: listing.images.first,
                           fit: BoxFit.cover,
-                          placeholder: (_, __) => Shimmer.fromColors(
+                          placeholder: (_, _) => Shimmer.fromColors(
                             baseColor: Colors.grey[300]!,
                             highlightColor: Colors.grey[100]!,
                             child: Container(color: Colors.white),
                           ),
-                          errorWidget: (_, __, ___) => Container(
+                          errorWidget: (_, _, _) => Container(
                             color: AppColors.surface,
                             child: const Icon(
                               Icons.fastfood_outlined,
@@ -94,7 +94,7 @@ class ListingCard extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity( 0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
@@ -120,7 +120,7 @@ class ListingCard extends StatelessWidget {
                           end: Alignment.bottomCenter,
                           colors: [
                             Colors.transparent,
-                            Colors.black.withOpacity( 0.7),
+                            Colors.black.withValues(alpha: 0.7),
                           ],
                         ),
                       ),
@@ -187,7 +187,7 @@ class ListingCard extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryLight.withOpacity( 0.15),
+                            color: AppColors.primaryLight.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -237,7 +237,7 @@ class ListingCard extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.success.withOpacity( 0.1),
+                            color: AppColors.success.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -258,7 +258,7 @@ class ListingCard extends StatelessWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.success.withOpacity( 0.1),
+                          color: AppColors.success.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -283,7 +283,7 @@ class ListingCard extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity( 0.1),
+                            color: AppColors.primary.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(

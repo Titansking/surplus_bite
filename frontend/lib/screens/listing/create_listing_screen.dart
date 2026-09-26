@@ -30,8 +30,8 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
 
   String _selectedCategory = 'Restaurant';
   String _selectedUnit = 'portions';
-  List<String> _selectedDietaryTags = [];
-  List<File> _selectedImages = [];
+  final List<String> _selectedDietaryTags = [];
+  final List<File> _selectedImages = [];
   DateTime _pickupStart = DateTime.now().add(const Duration(hours: 1));
   DateTime _pickupEnd = DateTime.now().add(const Duration(hours: 4));
   DateTime? _expiryDate;
@@ -60,6 +60,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       imageQuality: 80,
     );
     if (images.length + _selectedImages.length > AppConstants.maxImagesPerListing) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Maximum 5 images allowed'),
@@ -81,6 +82,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       lastDate: DateTime.now().add(const Duration(days: 7)),
     );
     if (date != null) {
+      if (!mounted) return;
       final time = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.fromDateTime(
@@ -117,6 +119,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       lastDate: DateTime.now().add(const Duration(days: 30)),
     );
     if (date != null) {
+      if (!mounted) return;
       final time = await showTimePicker(
         context: context,
         initialTime: TimeOfDay(hour: 23, minute: 59),
@@ -288,7 +291,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppColors.error.withOpacity(0.1),
+                color: AppColors.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text(
@@ -408,7 +411,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          value: _selectedCategory,
+          initialValue: _selectedCategory,
           decoration: const InputDecoration(labelText: 'Category'),
           items: AppConstants.categories
               .where((c) => c != 'All')
@@ -430,7 +433,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: _selectedUnit,
+                initialValue: _selectedUnit,
                 decoration: const InputDecoration(labelText: 'Unit'),
                 items: AppConstants.units
                     .map((u) => DropdownMenuItem(value: u, child: Text(u)))
@@ -498,7 +501,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppColors.error.withOpacity(0.1),
+                color: AppColors.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text(
@@ -563,7 +566,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppColors.error.withOpacity(0.1),
+                color: AppColors.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text(
@@ -649,7 +652,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppColors.error.withOpacity(0.1),
+                color: AppColors.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text(
@@ -744,7 +747,7 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
                   }
                 });
               },
-              selectedColor: AppColors.primary.withOpacity( 0.2),
+              selectedColor: AppColors.primary.withValues(alpha: 0.2),
               checkmarkColor: AppColors.primary,
             );
           }).toList(),

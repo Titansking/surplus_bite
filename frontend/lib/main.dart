@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'config/theme.dart';
 import 'config/routes.dart';
@@ -18,6 +19,8 @@ import 'screens/orders/order_detail_screen.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/profile/provider_dashboard_screen.dart';
 import 'screens/chat/chat_screen.dart';
+import 'screens/search/search_screen.dart';
+import 'screens/favorites/favorites_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,12 +29,20 @@ void main() async {
   // Required once before any Google Sign-In call (google_sign_in >= 7).
   await GoogleSignIn.instance.initialize();
 
+  // Initialize the local account registry so the switcher survives restarts.
+  final prefs = await SharedPreferences.getInstance();
+
   // Initialize notifications (free FCM)
   final notificationService = NotificationService();
   await notificationService.initialize();
   notificationService.handleBackgroundMessage();
 
-  runApp(const ProviderScope(child: SurplusBiteApp()));
+  runApp(
+    ProviderScope(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      child: const SurplusBiteApp(),
+    ),
+  );
 }
 
 class SurplusBiteApp extends ConsumerWidget {
@@ -91,6 +102,10 @@ class SurplusBiteApp extends ConsumerWidget {
             );
           case AppRoutes.chat:
             return MaterialPageRoute(builder: (_) => const ChatScreen());
+          case AppRoutes.search:
+            return MaterialPageRoute(builder: (_) => const SearchScreen());
+          case AppRoutes.favorites:
+            return MaterialPageRoute(builder: (_) => const FavoritesScreen());
           default:
             return MaterialPageRoute(builder: (_) => const LoginScreen());
         }
@@ -118,12 +133,16 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.eco, size: 72, color: AppColors.primary),
+            Image.asset(
+              'assets/images/food-safety.png',
+              width: 72,
+              height: 72,
+            ),
             SizedBox(height: 16),
             CircularProgressIndicator(),
           ],

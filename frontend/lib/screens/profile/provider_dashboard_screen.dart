@@ -87,7 +87,7 @@ class ProviderDashboardScreen extends ConsumerWidget {
         _buildStatCard(
           'Earnings',
           Formatters.currency((stats['totalEarnings'] ?? 0).toDouble()),
-          Icons.attach_money,
+          Icons.currency_rupee,
           AppColors.success,
         ),
         _buildStatCard(
@@ -165,7 +165,7 @@ class _RecentListings extends ConsumerWidget {
                           width: 50,
                           height: 50,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
+                          errorBuilder: (_, _, _) => Container(
                             width: 50,
                             height: 50,
                             color: AppColors.surface,
@@ -190,8 +190,8 @@ class _RecentListings extends ConsumerWidget {
                   ),
                   decoration: BoxDecoration(
                     color: listing.isAvailable
-                        ? AppColors.success.withOpacity(0.1)
-                        : AppColors.expired.withOpacity(0.1),
+                        ? AppColors.success.withValues(alpha: 0.1)
+                        : AppColors.expired.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(

@@ -7,7 +7,7 @@ import 'package:surplus_bite/providers/auth_provider.dart';
 import '../helpers/fakes.dart';
 
 void main() {
-  Future<void> _waitForStatus(
+  Future<void> waitForStatus(
     ProviderContainer container,
     AuthStatus expected,
   ) async {
@@ -32,7 +32,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      await _waitForStatus(container, AuthStatus.unauthenticated);
+      await waitForStatus(container, AuthStatus.unauthenticated);
 
       expect(container.read(authProvider).status, AuthStatus.unauthenticated);
     });

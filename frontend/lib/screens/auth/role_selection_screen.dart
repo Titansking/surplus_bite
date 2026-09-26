@@ -93,7 +93,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
             Expanded(
               child: ListView.separated(
                 itemCount: _roles.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 16),
+                separatorBuilder: (_, _) => const SizedBox(height: 16),
                 itemBuilder: (context, index) {
                   final role = _roles[index];
                   final isSelected = _selectedRole == role['role'];
@@ -106,7 +106,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? (role['color'] as Color).withOpacity( 0.1)
+                            ? (role['color'] as Color).withValues(alpha: 0.1)
                             : Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
@@ -121,7 +121,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: (role['color'] as Color).withOpacity( 0.15),
+                              color: (role['color'] as Color).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../models/listing_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/user_provider.dart';
 
 class ListingFilter {
   final String category;
@@ -58,6 +59,25 @@ final listingFilterProvider =
   return ListingFilterNotifier();
 });
 
+final searchQueryProvider = StateProvider<String>((ref) => '');
+
+final searchListingsProvider =
+    FutureProvider.family<List<ListingModel>, String>((ref, query) async {
+  final all = await ref.watch(allListingsProvider.future);
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return all;
+  return all
+      .where(
+        (l) =>
+            l.title.toLowerCase().contains(q) ||
+            l.description.toLowerCase().contains(q) ||
+            l.category.toLowerCase().contains(q) ||
+            l.pickupLocation.toLowerCase().contains(q) ||
+            l.dietaryTags.any((t) => t.toLowerCase().contains(q)),
+      )
+      .toList();
+});
+
 final allListingsProvider = StreamProvider<List<ListingModel>>((ref) {
   final firestoreService = ref.watch(firestoreServiceProvider);
   return firestoreService.allListings();
@@ -79,4 +99,12 @@ final listingDetailProvider =
     FutureProvider.family<ListingModel?, String>((ref, listingId) async {
   final firestoreService = ref.watch(firestoreServiceProvider);
   return firestoreService.getListing(listingId);
+});
+
+final favoriteListingsProvider =
+    FutureProvider.family<List<ListingModel>, String>((ref, userId) async {
+  final favorites = await ref.watch(favoritesProvider(userId).future);
+  final all = await ref.watch(allListingsProvider.future);
+  final favoriteIds = favorites.toSet();
+  return all.where((l) => favoriteIds.contains(l.id)).toList();
 });

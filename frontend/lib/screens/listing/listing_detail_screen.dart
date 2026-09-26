@@ -123,7 +123,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                               decoration: BoxDecoration(
                                 color: i == _selectedImageIndex
                                     ? Colors.white
-                                    : Colors.white.withOpacity(0.5),
+                                    : Colors.white.withValues(alpha: 0.5),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                             ),
@@ -215,7 +215,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.accent.withOpacity(0.15),
+                              color: AppColors.accent.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -239,7 +239,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.success.withOpacity(0.1),
+                          color: AppColors.success.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(
@@ -340,7 +340,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                               tag,
                               style: const TextStyle(fontSize: 12),
                             ),
-                            backgroundColor: AppColors.primary.withOpacity(0.1),
+                            backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                             padding: EdgeInsets.zero,
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
