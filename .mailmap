@@ -1,0 +1,8 @@
+# Attribute the surplus_bite work to the repository owner.
+#
+# The commits were authored with S-dev-coder <sk7137389@gmail.com>,
+# a colleague's account whose profile name is "Sakshi Kumari". GitHub
+# renders that profile name in the contributors box, so the work was
+# credited to the wrong person. Map the old identity onto the owner's
+# verified account.
+S-dev-coder <sk7137389@gmail.com> Titansking <akumarclash1@gmail.com>
