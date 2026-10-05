@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../config/routes.dart';
 import '../../config/theme.dart';
+import '../../models/local_account.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/validators.dart';
 
@@ -30,13 +32,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   void _register() {
-    if (_formKey.currentState!.validate()) {
-      Navigator.pushNamed(context, '/role-selection', arguments: {
-        'name': _nameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'password': _passwordController.text,
-      });
-    }
+    if (!_formKey.currentState!.validate()) return;
+
+    // Hand the details over via a provider: route arguments would retain the
+    // plaintext password on the Navigator for the lifetime of the route.
+    ref.read(pendingRegistrationProvider.notifier).state = PendingRegistration(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+    Navigator.pushNamed(context, AppRoutes.roleSelection);
   }
 
   @override

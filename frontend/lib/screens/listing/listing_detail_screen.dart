@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:photo_view/photo_view.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/listing_provider.dart';
@@ -21,10 +20,26 @@ class ListingDetailScreen extends ConsumerStatefulWidget {
 class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
   int _selectedImageIndex = 0;
   int _selectedQuantity = 1;
+  bool _isReserving = false;
+
+  String? _routeListingId() {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is String && args.isNotEmpty) {
+      return args;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final listingId = ModalRoute.of(context)!.settings.arguments as String;
+    final listingId = _routeListingId();
+    if (listingId == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Listing')),
+        body: const Center(child: Text('No listing was supplied.')),
+      );
+    }
+
     final listingAsync = ref.watch(listingDetailProvider(listingId));
     final user = ref.watch(currentUserProvider);
 
@@ -51,6 +66,14 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
 
   Widget _buildDetail(ListingModel listing, String? userId) {
     final isOwner = userId == listing.providerId;
+
+    // Never let the selector exceed what is actually left, even if the screen
+    // was left open while another buyer took the remaining stock.
+    final maxQuantity = listing.quantity < 1 ? 0 : listing.quantity;
+    if (_selectedQuantity > maxQuantity) {
+      _selectedQuantity = maxQuantity < 1 ? 1 : maxQuantity;
+    }
+    final canReserve = !isOwner && listing.isAvailable && maxQuantity > 0;
 
     return Scaffold(
       body: RefreshIndicator(
@@ -178,7 +201,9 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${Formatters.relativeTime(listing.createdAt)} ago',
+                          // `relativeTime` already renders phrases such as
+                          // "2 minutes ago", so no trailing " ago" here.
+                          Formatters.relativeTime(listing.createdAt),
                           style: TextStyle(
                             color: AppColors.textSecondary,
                             fontSize: 13,
@@ -356,7 +381,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
           ],
         ),
       ),
-      bottomSheet: !isOwner && listing.isAvailable
+      bottomSheet: canReserve
           ? Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
@@ -379,7 +404,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                     child: Row(
                       children: [
                         IconButton(
-                          onPressed: _selectedQuantity > 1
+                          onPressed: _selectedQuantity > 1 && !_isReserving
                               ? () => setState(() => _selectedQuantity--)
                               : null,
                           icon: const Icon(Icons.remove),
@@ -392,7 +417,8 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                           ),
                         ),
                         IconButton(
-                          onPressed: _selectedQuantity < listing.quantity
+                          onPressed:
+                              _selectedQuantity < maxQuantity && !_isReserving
                               ? () => setState(() => _selectedQuantity++)
                               : null,
                           icon: const Icon(Icons.add),
@@ -403,8 +429,19 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () => _reserveListing(listing),
-                      icon: const Icon(Icons.shopping_bag_outlined),
+                      onPressed: _isReserving
+                          ? null
+                          : () => _reserveListing(listing),
+                      icon: _isReserving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.shopping_bag_outlined),
                       label: Text(
                         'Reserve · ${Formatters.currency(listing.discountedPrice * _selectedQuantity)}',
                       ),
@@ -450,55 +487,73 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
 
   Future<void> _reserveListing(ListingModel listing) async {
     final user = ref.read(currentUserProvider);
-    if (user == null) return;
-
-    try {
-      final orderData = {
-        'listingId': listing.id,
-        'listingTitle': listing.title,
-        'buyerId': user.id,
-        'buyerName': user.name,
-        'providerId': listing.providerId,
-        'providerName': listing.providerName,
-        'providerPhone': listing.providerPhone,
-        'pickupLocation': listing.pickupLocation,
-        'quantity': _selectedQuantity,
-        'totalPrice': listing.discountedPrice * _selectedQuantity,
-        'status': 'pending',
-        'createdAt': Timestamp.now(),
-        'updatedAt': Timestamp.now(),
-      };
-
-      await FirebaseFirestore.instance.collection('orders').add(orderData);
-
-      final newQty = listing.quantity - _selectedQuantity;
-      await FirebaseFirestore.instance
-          .collection('listings')
-          .doc(listing.id)
-          .update({
-            'quantity': newQty,
-            'status': newQty <= 0 ? 'reserved' : 'available',
-            'updatedAt': Timestamp.now(),
-          });
-
+    if (user == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Reservation placed successfully!'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Please sign in to reserve this food.'),
             backgroundColor: AppColors.error,
           ),
         );
       }
+      return;
+    }
+
+    // Clamp locally so a stale screen can never ask for more than exists.
+    final quantity = _selectedQuantity.clamp(1, listing.quantity);
+    if (quantity < 1) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This listing is sold out.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isReserving = true);
+    try {
+      await ref
+          .read(firestoreServiceProvider)
+          .reserveListing(
+            listingId: listing.id,
+            buyerId: user.id,
+            buyerName: user.name,
+            quantity: quantity,
+          );
+
+      ref.invalidate(allListingsProvider);
+      ref.invalidate(listingDetailProvider(listing.id));
+
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Reservation placed successfully!'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } on StateError catch (e) {
+      if (!mounted) return;
+      ref.invalidate(listingDetailProvider(listing.id));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isReserving = false);
     }
   }
 }

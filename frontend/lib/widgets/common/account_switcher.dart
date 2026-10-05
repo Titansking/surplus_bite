@@ -35,7 +35,7 @@ class _AccountSwitcherSheetState extends ConsumerState<AccountSwitcherSheet> {
 
   Future<String?> _promptPassword(LocalAccount account) {
     final controller = TextEditingController();
-    return showDialog<String>(
+    final dialog = showDialog<String>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
@@ -55,13 +55,16 @@ class _AccountSwitcherSheetState extends ConsumerState<AccountSwitcherSheet> {
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controller.text.trim()),
               child: const Text('Sign In'),
             ),
           ],
         );
       },
     );
+    // The dialog borrows this controller, so it must outlive the dialog itself.
+    return dialog.whenComplete(controller.dispose);
   }
 
   void _finishSwitch() {

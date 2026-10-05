@@ -12,11 +12,24 @@ import 'package:surplus_bite/services/auth_service.dart';
 import 'package:surplus_bite/services/firestore_service.dart';
 
 class FakeAuthService implements AuthService {
-  FakeAuthService({this.authStateListener, this.onSignIn, this.onSignUp});
+  FakeAuthService({
+    this.authStateListener,
+    this.onSignIn,
+    this.onSignUp,
+    this.signUpResult,
+    this.onCreateFirestoreUser,
+    this.onRollback,
+  });
 
   final Stream<User?> Function()? authStateListener;
   final void Function(String email, String password)? onSignIn;
   final void Function(String email, String password, String name)? onSignUp;
+
+  /// Credential returned by [signUpWithEmail]. Defaults to a throwing
+  /// unimplemented so a test that does not care must opt in explicitly.
+  final UserCredential? Function(String email, String password)? signUpResult;
+  final void Function(UserModel user)? onCreateFirestoreUser;
+  final void Function(String uid)? onRollback;
 
   @override
   User? get currentUser => null;
@@ -46,6 +59,8 @@ class FakeAuthService implements AuthService {
     String name,
   ) async {
     onSignUp?.call(email, password, name);
+    final result = signUpResult?.call(email, password);
+    if (result != null) return result;
     throw UnimplementedError('signUpWithEmail is not exercised in this test');
   }
 
@@ -56,7 +71,14 @@ class FakeAuthService implements AuthService {
   Future<void> resetPassword(String email) async {}
 
   @override
-  Future<void> createFirestoreUser(UserModel user) async {}
+  Future<void> createFirestoreUser(UserModel user) async {
+    onCreateFirestoreUser?.call(user);
+  }
+
+  @override
+  Future<void> rollbackUser(String uid) async {
+    onRollback?.call(uid);
+  }
 
   @override
   Future<UserModel?> getFirestoreUser(String uid) async => null;
@@ -69,15 +91,47 @@ class FakeAuthService implements AuthService {
 }
 
 class FakeFirestoreService implements FirestoreService {
+  FakeFirestoreService({this.onGetProfile});
+
   UserModel? profile;
 
+  /// Thrown by [getUserProfile] when set, to simulate an unreachable backend.
+  Object? profileError;
+
+  /// Overrides the profile lookup entirely (used for ordering tests).
+  final Future<UserModel?> Function(String uid)? onGetProfile;
+
   @override
-  Future<UserModel?> getUserProfile(String uid) async => profile;
+  Future<UserModel?> getUserProfile(String uid) async {
+    final error = profileError;
+    if (error != null) throw error;
+    final handler = onGetProfile;
+    if (handler != null) return handler(uid);
+    return profile;
+  }
 
   @override
   Stream<UserModel?> userStream(String uid) async* {
     yield profile;
   }
+
+  @override
+  Future<void> cancelOrder(String orderId, String reason) async {}
+
+  @override
+  Future<void> restoreListingStock(String orderId) async {}
+
+  @override
+  Future<void> advanceOrderStatus(String orderId, String status) async {}
+
+  @override
+  Future<String> reserveListing({
+    required String listingId,
+    required String buyerId,
+    required String buyerName,
+    required int quantity,
+  }) async =>
+      'order-id';
 
   @override
   Future<void> updateUser(String uid, Map<String, dynamic> data) async {}

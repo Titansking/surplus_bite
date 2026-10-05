@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required by geolocator so a provider can attach their pickup
+         coordinates when publishing a listing. Without these the "Use my
+         current location" action fails at runtime. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
     <application
-        android:label="surplus_bite"
+        android:label="SurplusBite"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

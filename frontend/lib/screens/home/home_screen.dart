@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/theme.dart';
 import '../../config/constants.dart';
 import '../../config/routes.dart';
+import '../../models/order_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/listing_provider.dart';
 import '../../providers/order_provider.dart';
@@ -302,20 +303,58 @@ class _OrdersTab extends ConsumerWidget {
   }
 }
 
-class _ProviderOrdersList extends ConsumerWidget {
+class _ProviderOrdersList extends ConsumerStatefulWidget {
   final String providerId;
   const _ProviderOrdersList({required this.providerId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ordersAsync = ref.watch(providerOrdersProvider(providerId));
+  ConsumerState<_ProviderOrdersList> createState() =>
+      _ProviderOrdersListState();
+}
+
+class _ProviderOrdersListState extends ConsumerState<_ProviderOrdersList> {
+  String _lastSeenSignature = '';
+
+  /// Cancelling an order must return its reserved units to the listing. The
+  /// security rules only let a listing's owner increase its quantity, so this
+  /// runs from the provider's side and is idempotent per order.
+  Future<void> _releaseCancelledStock(List<OrderModel> orders) async {
+    final pending = orders
+        .where((o) => o.isCancelled && !o.stockRestored)
+        .map((o) => o.id)
+        .toList();
+    if (pending.isEmpty) return;
+
+    // Guard against re-running on every rebuild while a release is in flight.
+    final signature = pending.join(',');
+    if (signature == _lastSeenSignature) return;
+    _lastSeenSignature = signature;
+
+    final service = ref.read(firestoreServiceProvider);
+    for (final orderId in pending) {
+      try {
+        await service.restoreListingStock(orderId);
+        ref.invalidate(providerListingsProvider(widget.providerId));
+      } catch (e) {
+        debugPrint('ORDERS: stock release failed for $orderId: $e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ordersAsync = ref.watch(providerOrdersProvider(widget.providerId));
     return ordersAsync.when(
       data: (orders) {
+        // Side effects belong outside build; the helper is self-guarding.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _releaseCancelledStock(orders);
+        });
         return RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(providerOrdersProvider(providerId));
+            ref.invalidate(providerOrdersProvider(widget.providerId));
             try {
-              await ref.read(providerOrdersProvider(providerId).future);
+              await ref.read(providerOrdersProvider(widget.providerId).future);
             } catch (_) {}
           },
           child: orders.isEmpty
@@ -569,12 +608,10 @@ class _ProfileTab extends ConsumerWidget {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () {
+                    // The Navigator is rebuilt by SurplusBiteApp once the auth
+                    // status flips to unauthenticated; pushing here as well
+                    // raced with that rebuild.
                     ref.read(authProvider.notifier).signOut();
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/login',
-                      (route) => false,
-                    );
                   },
                   icon: const Icon(Icons.logout, color: AppColors.error),
                   label: const Text(

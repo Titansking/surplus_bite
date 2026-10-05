@@ -17,6 +17,10 @@ class OrderModel extends Equatable {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// Set once a cancelled order's reserved units have been returned to the
+  /// listing, so the release is never applied twice.
+  final bool stockRestored;
+
   const OrderModel({
     required this.id,
     required this.listingId,
@@ -30,6 +34,7 @@ class OrderModel extends Equatable {
     this.status = 'pending',
     this.pickupTime,
     this.cancellationReason,
+    this.stockRestored = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -53,6 +58,7 @@ class OrderModel extends Equatable {
       status: data['status'] ?? 'pending',
       pickupTime: (data['pickupTime'] as Timestamp?)?.toDate(),
       cancellationReason: data['cancellationReason'],
+      stockRestored: data['stockRestored'] == true,
       createdAt:
           (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt:
@@ -74,6 +80,7 @@ class OrderModel extends Equatable {
       'pickupTime':
           pickupTime != null ? Timestamp.fromDate(pickupTime!) : null,
       'cancellationReason': cancellationReason,
+      if (stockRestored) 'stockRestored': true,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../config/theme.dart';
 import '../../config/constants.dart';
+import '../../providers/auth_provider.dart';
 import '../../utils/validators.dart';
 
 class EditListingScreen extends ConsumerStatefulWidget {
@@ -31,9 +32,10 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
   DateTime? _expiryDate;
   bool _isSubmitting = false;
   bool _isLoading = true;
+  String? _loadError;
   String? _listingId;
 
-  @override
+@override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -41,33 +43,75 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _originalPriceController.dispose();
+    _discountedPriceController.dispose();
+    _quantityController.dispose();
+    _phoneController.dispose();
+    _pickupLocationController.dispose();
+    super.dispose();
+  }
+
+  String? _routeListingId() {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is String && args.isNotEmpty) {
+      return args;
+    }
+    return null;
+  }
+
   Future<void> _loadListing() async {
-    final listingId =
-        ModalRoute.of(context)!.settings.arguments as String;
+    final listingId = _routeListingId();
+    if (listingId == null) {
+      if (mounted) {
+        setState(() {
+          _loadError = 'No listing was supplied to edit.';
+          _isLoading = false;
+        });
+      }
+      return;
+    }
     _listingId = listingId;
 
-    final doc =
-        await FirebaseFirestore.instance.collection('listings').doc(listingId).get();
-    if (doc.exists) {
-      final data = doc.data()!;
+    try {
+      final listing =
+          await ref.read(firestoreServiceProvider).getListing(listingId);
+      if (!mounted) return;
+      if (listing == null) {
+        setState(() {
+          _loadError = 'That listing no longer exists.';
+          _isLoading = false;
+        });
+        return;
+      }
+
       setState(() {
-        _titleController.text = data['title'] ?? '';
-        _descriptionController.text = data['description'] ?? '';
+        _titleController.text = listing.title;
+        _descriptionController.text = listing.description;
         _originalPriceController.text =
-            (data['originalPrice'] ?? 0).toString();
+            listing.originalPrice.toStringAsFixed(2);
         _discountedPriceController.text =
-            (data['discountedPrice'] ?? 0).toString();
-        _quantityController.text = (data['quantity'] ?? 0).toString();
-        _selectedCategory = data['category'] ?? 'Restaurant';
-        _selectedUnit = data['unit'] ?? 'portions';
-        _selectedDietaryTags =
-            List<String>.from(data['dietaryTags'] ?? []);
-        _phoneController.text = data['providerPhone'] ?? '';
-        _pickupLocationController.text = data['pickupLocation'] ?? '';
-        _pickupStart =
-            (data['pickupStart'] as Timestamp?)?.toDate();
-        _pickupEnd = (data['pickupEnd'] as Timestamp?)?.toDate();
-        _expiryDate = (data['expiryDate'] as Timestamp?)?.toDate();
+            listing.discountedPrice.toStringAsFixed(2);
+        _quantityController.text = listing.quantity.toString();
+        _selectedCategory = listing.category.isEmpty
+            ? 'Restaurant'
+            : listing.category;
+        _selectedUnit = listing.unit.isEmpty ? 'portions' : listing.unit;
+        _selectedDietaryTags = List<String>.from(listing.dietaryTags);
+        _phoneController.text = listing.providerPhone;
+        _pickupLocationController.text = listing.pickupLocation;
+        _pickupStart = listing.pickupStart;
+        _pickupEnd = listing.pickupEnd;
+        _expiryDate = listing.expiryDate;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = 'Could not load this listing: $e';
         _isLoading = false;
       });
     }
@@ -136,16 +180,38 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
       );
       return;
     }
+    final original = double.parse(_originalPriceController.text.trim());
+    final discounted = double.parse(_discountedPriceController.text.trim());
+    if (discounted > original) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your price cannot be higher than the original price'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+    if (_pickupStart != null &&
+        _pickupEnd != null &&
+        _pickupEnd!.isBefore(_pickupStart!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pickup end time must be after start time'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
     setState(() => _isSubmitting = true);
 
     try {
-      final updates = {
+      final updates = <String, dynamic>{
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
         'category': _selectedCategory,
-        'originalPrice': double.parse(_originalPriceController.text),
-        'discountedPrice': double.parse(_discountedPriceController.text),
-        'quantity': int.parse(_quantityController.text),
+        'originalPrice': original,
+        'discountedPrice': discounted,
+        'quantity': int.parse(_quantityController.text.trim()),
         'unit': _selectedUnit,
         'providerPhone': _phoneController.text.trim(),
         'pickupLocation': _pickupLocationController.text.trim(),
@@ -161,10 +227,7 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
       }
       updates['expiryDate'] = Timestamp.fromDate(_expiryDate!);
 
-      await FirebaseFirestore.instance
-          .collection('listings')
-          .doc(_listingId)
-          .update(updates);
+      await ref.read(firestoreServiceProvider).updateListing(_listingId!, updates);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -182,7 +245,9 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
         );
       }
     } finally {
-      setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -192,6 +257,34 @@ class _EditListingScreenState extends ConsumerState<EditListingScreen> {
       return Scaffold(
         appBar: AppBar(title: const Text('Edit Listing')),
         body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_loadError != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Edit Listing')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                const SizedBox(height: 12),
+                Text(
+                  _loadError!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 20),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Go back'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 

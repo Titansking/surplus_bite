@@ -1,18 +1,329 @@
-rules_version='2'
+rules_version = '2';
+
+// SurplusBite - Firestore security rules
+//
+// Access model:
+//   - Every document belongs to an authenticated user; anonymous access is
+//     denied outright so scraped API keys cannot read the database.
+//   - `users/{uid}.role` (consumer | provider | ngo) is the single source of
+//     truth for authorisation. A user picks their role once at signup and can
+//     never escalate it from the client.
+//   - Orders drive a strict lifecycle: pending -> confirmed -> picked_up ->
+//     completed, with cancellation allowed only before collection. The allowed
+//     transitions below mirror the buttons rendered by the app.
+//   - Reviews are immutable and can only be written by the buyer of a
+//     completed order, against the provider who fulfilled it.
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if request.time < timestamp.date(2026, 10, 3);
+
+    // ==================== helpers ====================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myRole() {
+      return isSignedIn()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isProvider() {
+      return myRole() == 'provider';
+    }
+
+    // Top-level keys that a request rewrites. Undefined for creates.
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function onlyChanged(allowed) {
+      return changedKeys().hasOnly(allowed);
+    }
+
+    function isValidRole(role) {
+      return role in ['consumer', 'provider', 'ngo'];
+    }
+
+    function isListingStatus(status) {
+      return status in ['available', 'reserved', 'expired', 'completed'];
+    }
+
+    function stringWithin(value, max) {
+      return value is string && value.size() > 0 && value.size() <= max;
+    }
+
+    // A listing can still be reserved, and it has enough stock for `qty`.
+    function listingCanSatisfy(listingId, qty) {
+      let l = get(/databases/$(database)/documents/listings/$(listingId)).data;
+      return l.status == 'available'
+        && l.quantity is int
+        && qty <= l.quantity;
+    }
+
+    // A review is only legitimate against a completed order the reviewer
+    // actually placed, and only for the provider who fulfilled it.
+    function isFulfilledOrder(orderId, revieweeId) {
+      let o = get(/databases/$(database)/documents/orders/$(orderId)).data;
+      return o.status == 'completed'
+        && o.buyerId == request.auth.uid
+        && o.providerId == revieweeId;
+    }
+
+    // A review is stored at a deterministic path - reviews/{orderId} - so the
+    // existence check below is a single get() and one review per order is
+    // enforced by the document id rather than by a query.
+    function reviewForOrder(orderId) {
+      return get(/databases/$(database)/documents/reviews/$(orderId)).data;
+    }
+
+    // The writer is updating the aggregate for `userId`; it is only legitimate
+    // when they left a review for that user, proven by the order the update
+    // claims to be derived from.
+    function hasReviewedUser(userId) {
+      let orderId = request.resource.data.ratingOrderId;
+      return orderId is string
+        && exists(/databases/$(database)/documents/reviews/$(orderId))
+        && reviewForOrder(orderId).reviewerId == request.auth.uid
+        && reviewForOrder(orderId).revieweeId == userId;
+    }
+
+    function roomParticipants(roomId) {
+      return get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.participants;
+    }
+
+    function isParticipant(participants) {
+      return isSignedIn() && request.auth.uid in participants;
+    }
+
+    // Orders written before stock release existed have no `stockRestored`
+    // field, and reading a missing key is an evaluation error in rules - so
+    // membership must be tested explicitly.
+    function isReleased(order) {
+      return 'stockRestored' in order && order.stockRestored == true;
+    }
+
+    // ==================== users ====================
+
+    match /users/{userId} {
+
+      // Profiles are private: the app denormalises provider names and ratings
+      // into listings/orders/reviews so it never needs to read another profile.
+      allow read: if isSignedIn() && request.auth.uid == userId;
+
+      // Self-registration. The role is chosen once here and the aggregate
+      // rating must start at zero so it cannot be seeded from the client.
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && isValidRole(request.resource.data.role)
+        && request.resource.data.rating == 0
+        && request.resource.data.totalRatings == 0;
+
+      // Profile edits: owner only, and identity/derived fields are off limits.
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && onlyChanged([
+          'name', 'phone', 'businessName', 'businessDescription',
+          'location', 'address', 'profileImage', 'favorites', 'updatedAt'
+        ]);
+
+      // The aggregate rating is recomputed from the reviews collection after a
+      // review is stored, so the reviewer may write the counters - but only
+      // onto a user they actually reviewed. Without that check any signed-in
+      // account could set anyone's rating to 0 or 5.
+      allow update: if isSignedIn()
+        && request.auth.uid != userId
+        && onlyChanged(['rating', 'totalRatings', 'updatedAt', 'ratingOrderId'])
+        && hasReviewedUser(userId)
+        && request.resource.data.rating is number
+        && request.resource.data.rating >= 0
+        && request.resource.data.rating <= 5
+        && request.resource.data.totalRatings is int
+        && request.resource.data.totalRatings >= 0;
+
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ==================== listings ====================
+
+    match /listings/{listingId} {
+
+      // Surplus food is a public feed: any signed-in user may browse it.
+      allow read: if isSignedIn();
+
+      // Only providers publish surplus, and only under their own account.
+      allow create: if isProvider()
+        && request.resource.data.providerId == request.auth.uid
+        && isListingStatus(request.resource.data.status)
+        && stringWithin(request.resource.data.title, 120)
+        && stringWithin(request.resource.data.description, 500)
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity > 0
+        && request.resource.data.originalPrice is number
+        && request.resource.data.discountedPrice is number
+        && request.resource.data.discountedPrice >= 0
+        && request.resource.data.originalPrice >= request.resource.data.discountedPrice
+        && request.resource.data.images is list
+        && request.resource.data.images.size() <= 5
+        && request.resource.data.dietaryTags is list
+        && request.resource.data.images.size() > 0;
+
+      // Owners edit the food details. providerId and createdAt are not in the
+      // allowed set, so a listing can never be transferred or backdated.
+      allow update: if isSignedIn()
+        && resource.data.providerId == request.auth.uid
+        && onlyChanged([
+          'title', 'description', 'category', 'originalPrice', 'discountedPrice',
+          'quantity', 'unit', 'images', 'providerPhone', 'pickupLocation',
+          'dietaryTags', 'pickupStart', 'pickupEnd', 'expiryDate', 'status', 'updatedAt'
+        ])
+        && isListingStatus(request.resource.data.status)
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 0;
+
+      // Reserving stock: a buyer may only move a listing from available to reserved
+      // and may only shrink the quantity. Restricting the target status stops a
+      // buyer from driving the quantity to 0 and flipping the listing straight
+      // to 'completed' or 'expired', which used to let any account grief a
+      // seller's stock.
+      allow update: if isSignedIn()
+        && resource.data.providerId != request.auth.uid
+        && resource.data.status == 'available'
+        && onlyChanged(['quantity', 'status', 'updatedAt'])
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 0
+        && request.resource.data.quantity < resource.data.quantity
+        && request.resource.data.status in ['available', 'reserved'];
+
+      allow delete: if isSignedIn()
+        && resource.data.providerId == request.auth.uid;
+    }
+
+    // ==================== orders ====================
+
+    match /orders/{orderId} {
+
+      // Orders are visible only to the two parties involved.
+      allow read: if isSignedIn()
+        && (resource.data.buyerId == request.auth.uid
+          || resource.data.providerId == request.auth.uid);
+
+      // Reservations: the buyer books their own order, against a live listing
+      // with enough stock, always starting at `pending`.
+      allow create: if isSignedIn()
+        && request.resource.data.buyerId == request.auth.uid
+        && request.resource.data.providerId != request.auth.uid
+        && exists(/databases/$(database)/documents/listings/$(request.resource.data.listingId))
+        && listingCanSatisfy(request.resource.data.listingId, request.resource.data.quantity)
+        && request.resource.data.status == 'pending'
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity > 0
+        && request.resource.data.totalPrice is number
+        && request.resource.data.totalPrice >= 0;
+
+      // Provider side: confirm, hand over, decline, or release the stock a
+      // cancelled order was holding.
+      allow update: if isSignedIn()
+        && resource.data.providerId == request.auth.uid
+        && onlyChanged(['status', 'pickupTime', 'cancellationReason', 'updatedAt', 'stockRestored'])
+        && (
+             (resource.data.status == 'pending'    && request.resource.data.status == 'confirmed')
+          || (resource.data.status == 'confirmed' && request.resource.data.status == 'picked_up')
+          || (resource.data.status == 'pending'    && request.resource.data.status == 'cancelled')
+          || (resource.data.status == 'confirmed' && request.resource.data.status == 'cancelled')
+          // Stock release for an already-cancelled order. `stockRestored` may
+          // only move false -> true so it cannot be replayed to inflate a
+          // listing's quantity.
+          || (resource.data.status == 'cancelled'
+              && !isReleased(resource.data)
+              && request.resource.data.stockRestored == true)
+        );
+
+      // Buyer side: confirm collection, or cancel until it is picked up.
+      allow update: if isSignedIn()
+        && resource.data.buyerId == request.auth.uid
+        && onlyChanged(['status', 'pickupTime', 'cancellationReason', 'updatedAt'])
+        && (
+             (resource.data.status == 'picked_up'  && request.resource.data.status == 'completed')
+          || (resource.data.status == 'pending'    && request.resource.data.status == 'cancelled')
+          || (resource.data.status == 'confirmed' && request.resource.data.status == 'cancelled')
+        );
+
+      // Only the order's provider may mark the stock as released; a buyer must
+      // not be able to claim it, which would strand the listing's quantity.
+      allow update: if isSignedIn()
+        && resource.data.providerId == request.auth.uid
+        && onlyChanged(['stockRestored'])
+        && request.resource.data.stockRestored == true
+        && resource.data.status == 'cancelled'
+        && !isReleased(resource.data);
+
+      // Orders are an audit trail: never deletable by the client.
+      allow delete: if false;
+    }
+
+    // ==================== reviews ====================
+
+    match /reviews/{reviewId} {
+
+      allow read: if isSignedIn();
+
+      // The document id must be the order id. Because Firestore rejects a
+      // create against an existing path, that single constraint is what
+      // prevents a buyer from stacking several reviews on one order - which a
+      // `get()`-based existence check alone could not catch reliably.
+      allow create: if isSignedIn()
+        && reviewId == request.resource.data.orderId
+        && request.resource.data.reviewerId == request.auth.uid
+        && request.resource.data.revieweeId != request.auth.uid
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && isFulfilledOrder(
+             request.resource.data.orderId,
+             request.resource.data.revieweeId
+           );
+
+      // Reviews are immutable, including the aggregate on the reviewee.
+      allow update, delete: if false;
+    }
+
+    // ==================== chat ====================
+
+    match /chat_rooms/{roomId} {
+
+      allow read: if isParticipant(resource.data.participants);
+
+      // A room is always a two-person conversation the requester is part of.
+      allow create: if isParticipant(request.resource.data.participants)
+        && request.resource.data.participants.size() == 2
+        && request.resource.data.participantNames[request.auth.uid] is string;
+
+      // The conversation-list preview is maintained by whoever sent the
+      // message. Participants stay frozen, so a room can never be hijacked.
+      allow update: if isParticipant(resource.data.participants)
+        && onlyChanged(['lastMessage', 'lastMessageTime', 'lastMessageSenderId'])
+        && request.resource.data.participants == resource.data.participants
+        && request.resource.data.lastMessageSenderId == request.auth.uid;
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+
+        allow read: if isParticipant(roomParticipants(roomId));
+
+        allow create: if isParticipant(roomParticipants(roomId))
+          && request.resource.data.senderId == request.auth.uid
+          && stringWithin(request.resource.data.text, 2000)
+          && stringWithin(request.resource.data.senderName, 80);
+
+        // Messages are immutable; a sender may retract their own.
+        allow update: if false;
+        allow delete: if isSignedIn()
+          && resource.data.senderId == request.auth.uid
+          && request.auth.uid in roomParticipants(roomId);
+      }
     }
   }
 }

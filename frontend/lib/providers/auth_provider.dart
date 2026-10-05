@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -33,19 +35,34 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final FirestoreService _firestoreService;
   final AccountsNotifier _accounts;
 
+  StreamSubscription<User?>? _authSubscription;
+  int _authEpoch = 0;
+
   AuthNotifier(this._authService, this._firestoreService, this._accounts)
     : super(const AuthState()) {
     _init();
   }
 
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    _authSubscription = null;
+    super.dispose();
+  }
+
   void _init() {
-    _authService.authStateChanges.listen((user) async {
+    _authSubscription = _authService.authStateChanges.listen((user) async {
+      // Every emission supersedes any in-flight profile lookup, so a slow read
+      // from a previous account can never overwrite the current one.
+      final epoch = ++_authEpoch;
       try {
         if (user != null) {
           debugPrint('AUTH: user != null, fetching profile for ${user.uid}');
           var userModel = await _firestoreService
               .getUserProfile(user.uid)
               .timeout(const Duration(seconds: 10));
+
+          if (!mounted || epoch != _authEpoch) return;
 
           if (userModel == null) {
             final now = DateTime.now();
@@ -59,6 +76,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
               updatedAt: now,
             );
             await _authService.createFirestoreUser(userModel);
+            if (!mounted || epoch != _authEpoch) return;
           }
 
           _accounts.upsert(
@@ -80,8 +98,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
           state = const AuthState(status: AuthStatus.unauthenticated);
         }
       } catch (e) {
+        if (!mounted || epoch != _authEpoch) return;
         debugPrint('AUTH: error $e');
-        state = AuthState(status: AuthStatus.error, error: e.toString());
+        // A profile lookup failure must not eject an otherwise valid session:
+        // keep the user signed in and surface the error alongside the user.
+        state = user != null
+            ? AuthState(
+                status: AuthStatus.authenticated,
+                user: state.user,
+                error: e.toString(),
+              )
+            : AuthState(status: AuthStatus.error, error: e.toString());
       }
     });
   }
@@ -158,15 +185,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String role,
   ) async {
     state = state.copyWith(status: AuthStatus.loading);
+    User? created;
     try {
       final credential = await _authService.signUpWithEmail(
         email,
         password,
         name,
       );
+      // `user` is null when Firebase applies email-enumeration protection;
+      // a hard unwrap here would crash the sign-up flow.
+      final firebaseUser = credential.user;
+      if (firebaseUser == null) {
+        throw StateError(
+          'Sign-up did not return a user. Please try signing in instead.',
+        );
+      }
+      created = firebaseUser;
+
       final now = DateTime.now();
       final user = UserModel(
-        id: credential.user!.uid,
+        id: firebaseUser.uid,
         name: name,
         email: email,
         role: role,
@@ -175,6 +213,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       await _authService.createFirestoreUser(user);
     } catch (e) {
+      // Roll the auth account back so a half-created user cannot get stuck in
+      // a signed-in state with no Firestore profile.
+      if (created != null) {
+        try {
+          await _authService.rollbackUser(created.uid);
+        } catch (rollbackError) {
+          debugPrint('AUTH: sign-up rollback failed: $rollbackError');
+        }
+      }
       state = AuthState(status: AuthStatus.error, error: e.toString());
     }
   }
@@ -206,6 +253,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   bool get isProvider => state.user?.isProvider ?? false;
   bool get isNGO => state.user?.isNGO ?? false;
 }
+
+/// Holds the sign-up details between the register form and the role picker.
+/// This is deliberately a provider rather than a route argument: route
+/// arguments are retained by the Navigator for the route's lifetime, which
+/// would keep the plaintext password alive in memory (and in any route
+/// logging) far longer than needed.
+final pendingRegistrationProvider =
+    StateProvider<PendingRegistration?>((ref) => null);
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 final firestoreServiceProvider = Provider<FirestoreService>(

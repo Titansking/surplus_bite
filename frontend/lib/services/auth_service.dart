@@ -53,6 +53,21 @@ class AuthService {
     await _firestore.collection('users').doc(user.id).set(user.toFirestore());
   }
 
+  /// Best-effort cleanup used when sign-up fails halfway through: removes the
+  /// orphaned profile and the auth account itself.
+  Future<void> rollbackUser(String uid) async {
+    try {
+      await _firestore.collection('users').doc(uid).delete();
+    } catch (_) {
+      // The profile may never have been written; the auth delete below is what
+      // actually matters for unblocking the user.
+    }
+    final user = _auth.currentUser;
+    if (user != null && user.uid == uid) {
+      await user.delete();
+    }
+  }
+
   Future<UserModel?> getFirestoreUser(String uid) async {
     final doc = await _firestore.collection('users').doc(uid).get();
     if (doc.exists) {

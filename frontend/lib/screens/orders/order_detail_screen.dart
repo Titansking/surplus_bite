@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/order_provider.dart';
@@ -16,11 +15,31 @@ class OrderDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
+  bool _isUpdating = false;
+  String? _uid;
+
+  String? _routeOrderId() {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is String && args.isNotEmpty) {
+      return args;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final orderId = ModalRoute.of(context)!.settings.arguments as String;
+    final orderId = _routeOrderId();
+    if (orderId == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Order Details')),
+        body: const Center(child: Text('No order was supplied.')),
+      );
+    }
+
     final orderAsync = ref.watch(orderDetailProvider(orderId));
     final user = ref.watch(currentUserProvider);
+    final uid = user?.id;
+    _uid = uid;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Order Details')),
@@ -29,7 +48,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
           if (order == null) {
             return const Center(child: Text('Order not found'));
           }
-          return _buildOrderDetail(order, user?.id);
+          return _buildOrderDetail(order, uid);
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -167,13 +186,15 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
   Widget _buildActionButtons(OrderModel order, bool isProvider, bool isBuyer) {
     if (order.isCancelled || order.isCompleted) return const SizedBox.shrink();
 
+    final busy = _isUpdating;
+
     return Column(
       children: [
         if (isProvider && order.isPending) ...[
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () => _updateStatus(order.id, 'confirmed'),
+              onPressed: busy ? null : () => _updateStatus(order.id, 'confirmed'),
               child: const Text('Confirm Order'),
             ),
           ),
@@ -181,7 +202,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () => _cancelOrder(order.id),
+              onPressed: busy ? null : () => _cancelOrder(order.id),
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: AppColors.error),
               ),
@@ -196,7 +217,8 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () => _updateStatus(order.id, 'picked_up'),
+              onPressed:
+                  busy ? null : () => _updateStatus(order.id, 'picked_up'),
               child: const Text('Mark as Picked Up'),
             ),
           ),
@@ -205,7 +227,8 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () => _updateStatus(order.id, 'completed'),
+              onPressed:
+                  busy ? null : () => _updateStatus(order.id, 'completed'),
               child: const Text('Confirm Receipt'),
             ),
           ),
@@ -215,7 +238,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () => _cancelOrder(order.id),
+              onPressed: busy ? null : () => _cancelOrder(order.id),
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: AppColors.error),
               ),
@@ -231,11 +254,16 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
   }
 
   Future<void> _updateStatus(String orderId, String status) async {
+    setState(() => _isUpdating = true);
     try {
-      await FirebaseFirestore.instance.collection('orders').doc(orderId).update(
-        {'status': status, 'updatedAt': Timestamp.now()},
-      );
+      await ref
+          .read(firestoreServiceProvider)
+          .advanceOrderStatus(orderId, status);
       ref.invalidate(orderDetailProvider(orderId));
+      if (_uid != null) {
+        ref.invalidate(buyerOrdersProvider(_uid!));
+        ref.invalidate(providerOrdersProvider(_uid!));
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -253,14 +281,16 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isUpdating = false);
     }
   }
 
   Future<void> _cancelOrder(String orderId) async {
+    final controller = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
       builder: (context) {
-        final controller = TextEditingController();
         return AlertDialog(
           title: const Text('Cancel Order'),
           content: TextField(
@@ -282,20 +312,18 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
         );
       },
     );
+    controller.dispose();
+    if (!mounted) return;
 
     if (reason != null) {
       try {
-        await FirebaseFirestore.instance
-            .collection('orders')
-            .doc(orderId)
-            .update({
-              'status': 'cancelled',
-              'cancellationReason': reason.isNotEmpty
-                  ? reason
-                  : 'No reason given',
-              'updatedAt': Timestamp.now(),
-            });
+        await ref.read(firestoreServiceProvider).cancelOrder(
+              orderId,
+              reason.trim().isEmpty ? 'No reason given' : reason.trim(),
+            );
         ref.invalidate(orderDetailProvider(orderId));
+        ref.invalidate(buyerOrdersProvider(_uid!));
+        ref.invalidate(providerOrdersProvider(_uid!));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

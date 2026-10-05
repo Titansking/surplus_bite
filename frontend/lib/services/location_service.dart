@@ -70,3 +70,10 @@ class LocationService {
     ) / 1000; // Convert to km
   }
 }
+
+/// Null Island is the classic "unset coordinate" sentinel. Treat it as missing
+/// so a listing can never be published at 0,0.
+bool isNullIsland(GeoPoint? point) {
+  return point == null ||
+      (point.latitude.abs() < 0.0001 && point.longitude.abs() < 0.0001);
+}

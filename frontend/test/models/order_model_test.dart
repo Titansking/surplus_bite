@@ -86,6 +86,55 @@ void main() {
     });
   });
 
+  group('stockRestored', () {
+    test('defaults to false for orders without the field', () {
+      final order = OrderModel.fromMap(
+        {
+          'quantity': 2,
+          'status': 'cancelled',
+          'createdAt': Timestamp.fromDate(now),
+          'updatedAt': Timestamp.fromDate(now),
+        },
+        id: 'order-1',
+      );
+      expect(order.stockRestored, isFalse);
+    });
+
+    test('is true once the provider has released the reserved units', () {
+      final order = OrderModel.fromMap(
+        {
+          'quantity': 2,
+          'status': 'cancelled',
+          'stockRestored': true,
+          'createdAt': Timestamp.fromDate(now),
+          'updatedAt': Timestamp.fromDate(now),
+        },
+        id: 'order-1',
+      );
+      expect(order.stockRestored, isTrue);
+    });
+
+    test('a released order round-trips through toFirestore', () {
+      final released = OrderModel.fromMap(
+        {
+          'quantity': 2,
+          'status': 'cancelled',
+          'stockRestored': true,
+          'createdAt': Timestamp.fromDate(now),
+          'updatedAt': Timestamp.fromDate(now),
+        },
+        id: 'order-1',
+      );
+      expect(released.toFirestore()['stockRestored'], isTrue);
+    });
+
+    test('an unreleased order omits the field entirely', () {
+      // The rules distinguish "absent" from "true", so toFirestore must not
+      // write a false that would read back as an explicit false.
+      expect(buildOrder().toFirestore().containsKey('stockRestored'), isFalse);
+    });
+  });
+
   group('status helpers', () {
     test('isPending', () => expect(buildOrder().isPending, isTrue));
 

@@ -2,7 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../models/user_model.dart';
 import '../services/firestore_service.dart';
+import '../services/location_service.dart';
 import '../providers/auth_provider.dart';
+
+final locationServiceProvider =
+    Provider<LocationService>((ref) => LocationService());
 
 final userProvider =
     StreamProvider.family<UserModel?, String>((ref, uid) {

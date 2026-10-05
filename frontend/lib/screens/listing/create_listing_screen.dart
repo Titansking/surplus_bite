@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import '../../config/theme.dart';
 import '../../config/constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/user_provider.dart';
+import '../../services/location_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/validators.dart';
 
@@ -37,9 +39,12 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
   DateTime? _expiryDate;
   GeoPoint? _location;
   bool _isSubmitting = false;
+  bool _isLocating = false;
 
   final _imagePicker = ImagePicker();
   final _storageService = StorageService();
+  late final LocationService _locationService =
+      ref.read(locationServiceProvider);
 
   @override
   void dispose() {
@@ -74,7 +79,49 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
     });
   }
 
-  Future<void> _selectPickupTime(bool isStart) async {
+  /// Captures the provider's current position. A listing without a real
+/// coordinate cannot be matched to nearby buyers, so this is required rather
+/// than falling back to 0,0.
+Future<void> _useCurrentLocation() async {
+  if (_isLocating) return;
+  setState(() => _isLocating = true);
+  try {
+    final point = await _locationService.getCurrentGeoPoint();
+    if (!mounted) return;
+    if (isNullIsland(point)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not get your location. Enable location access and try again.',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final address = await _locationService.getAddressFromGeoPoint(point!);
+    if (!mounted) return;
+    setState(() {
+      _location = point;
+      if (address != null && _pickupLocationController.text.trim().isEmpty) {
+        _pickupLocationController.text = address;
+      }
+    });
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Could not get your location: $e'),
+        backgroundColor: AppColors.error,
+      ),
+    );
+  } finally {
+    if (mounted) setState(() => _isLocating = false);
+  }
+}
+
+Future<void> _selectPickupTime(bool isStart) async {
     final date = await showDatePicker(
       context: context,
       initialDate: isStart ? _pickupStart : _pickupEnd,
@@ -165,6 +212,28 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
       );
       return;
     }
+    if (isNullIsland(_location)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add your pickup location'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final originalPrice = double.parse(_originalPriceController.text.trim());
+    final discountedPrice =
+        double.parse(_discountedPriceController.text.trim());
+    if (discountedPrice > originalPrice) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your price cannot be higher than the original price'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
 
     final user = ref.read(currentUserProvider);
     if (user == null) return;
@@ -184,12 +253,12 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
         'category': _selectedCategory,
-        'originalPrice': double.parse(_originalPriceController.text),
-        'discountedPrice': double.parse(_discountedPriceController.text),
-        'quantity': int.parse(_quantityController.text),
+        'originalPrice': originalPrice,
+        'discountedPrice': discountedPrice,
+        'quantity': int.parse(_quantityController.text.trim()),
         'unit': _selectedUnit,
         'images': imageUrls,
-        'location': _location ?? const GeoPoint(0, 0),
+        'location': _location!,
         'pickupLocation': _pickupLocationController.text.trim(),
         'pickupStart': Timestamp.fromDate(_pickupStart),
         'pickupEnd': Timestamp.fromDate(_pickupEnd),
@@ -221,7 +290,9 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
         );
       }
     } finally {
-      setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -546,6 +617,25 @@ class _CreateListingScreenState extends ConsumerState<CreateListingScreen> {
         Text(
           'Specific instructions for where buyers should pick up the food',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _isSubmitting || _isLocating ? null : _useCurrentLocation,
+          icon: _isLocating
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.my_location, size: 18),
+          label: Text(
+            _location == null
+                ? 'Use my current location'
+                : 'Location captured - tap to update',
+          ),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+          ),
         ),
       ],
     );

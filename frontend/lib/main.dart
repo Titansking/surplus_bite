@@ -51,15 +51,19 @@ class SurplusBiteApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
+    final initialRoute = _initialRoute(authState.status);
 
     return MaterialApp(
-      // Rebuild the Navigator whenever the auth status flips so a restored
-      // session (cold start) or a fresh login lands on the right screen.
-      key: ValueKey(authState.status),
+      // Only the *destination* keys the app, not the raw auth status. Keying on
+      // every status change (loading -> authenticated -> ...) tore down and
+      // rebuilt the whole Navigator while screens were still navigating, which
+      // is what caused the double-navigation crashes. Auth-driven navigation is
+      // owned entirely here, so screens must not push it themselves.
+      key: ValueKey(initialRoute),
       title: 'SurplusBite',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      initialRoute: _getInitialRoute(authState),
+      initialRoute: initialRoute,
       onGenerateRoute: (settings) {
         switch (settings.name) {
           case AppRoutes.splash:
@@ -113,17 +117,18 @@ class SurplusBiteApp extends ConsumerWidget {
     );
   }
 
-  String _getInitialRoute(AuthState authState) {
-    switch (authState.status) {
+  String _initialRoute(AuthStatus status) {
+    switch (status) {
       case AuthStatus.authenticated:
         return AppRoutes.home;
-      case AuthStatus.loading:
-      case AuthStatus.unauthenticated:
-      case AuthStatus.error:
-        return AppRoutes.login; // login screen shows the loading spinner
       case AuthStatus.initial:
         // Session is being restored from the platform; hold on a splash.
         return AppRoutes.splash;
+      case AuthStatus.loading:
+      case AuthStatus.unauthenticated:
+      case AuthStatus.error:
+        // The login screen renders its own spinner while `loading`.
+        return AppRoutes.login;
     }
   }
 }

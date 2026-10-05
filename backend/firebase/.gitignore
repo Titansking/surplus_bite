@@ -1,0 +1,9 @@
+# Firebase tooling
+node_modules/
+package-lock.json
+
+# Emulator artifacts
+firestore-debug.log
+ui-debug.log
+*-debug.log
+.firebase/

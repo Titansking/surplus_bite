@@ -41,3 +41,11 @@ ios/Flutter/Flutter.podspec
 
 # Windows
 Thumbs.db
+
+# Node / Firebase tooling (backend/firebase)
+node_modules/
+
+# Build artifacts: APKs are ~20-60MB each and are rebuilt from source.
+# dist/README.md is tracked so the build instructions survive.
+dist/*.apk
+dist/*.aab

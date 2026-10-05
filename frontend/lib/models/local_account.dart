@@ -1,3 +1,18 @@
+/// Credentials collected by the sign-up form and consumed once the user picks
+/// a role. Passed through a Riverpod provider rather than route arguments so
+/// the plaintext password is never stored on a Navigator route.
+class PendingRegistration {
+  final String name;
+  final String email;
+  final String password;
+
+  const PendingRegistration({
+    required this.name,
+    required this.email,
+    required this.password,
+  });
+}
+
 class LocalAccount {
   final String uid;
   final String email;

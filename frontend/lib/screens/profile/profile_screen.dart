@@ -83,7 +83,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
       ref.read(authProvider.notifier).refreshProfile();
 
-      setState(() => _isEditing = false);
+      if (mounted) {
+        setState(() => _isEditing = false);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -103,7 +105,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         );
       }
     } finally {
-      setState(() => _isSaving = false);
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/validators.dart';
@@ -73,17 +74,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         );
       },
     );
+    // Read the address before disposing: the dialog's field is torn down here.
+    final email = emailController.text.trim();
+    emailController.dispose();
     if (sent != true || !mounted) return;
 
     final ok = await ref
         .read(authProvider.notifier)
-        .resetPassword(emailController.text.trim());
+        .resetPassword(email);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           ok
-              ? 'Password reset link sent to ${emailController.text.trim()}.'
+              ? 'Password reset link sent to $email.'
               : 'Failed to send reset link. Please try again.',
         ),
         backgroundColor: ok ? AppColors.success : AppColors.error,
@@ -96,13 +100,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final authState = ref.watch(authProvider);
 
     ref.listen<AuthState>(authProvider, (prev, next) {
-      if (next.status == AuthStatus.authenticated) {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/home',
-          (route) => false,
-        );
-      } else if (next.status == AuthStatus.error && next.error != null) {
+      // Navigation on auth change is owned by SurplusBiteApp (main.dart); the
+      // Navigator is rebuilt there. Pushing from here as well raced with that
+      // rebuild and navigated on a defunct context.
+      if (next.status == AuthStatus.error && next.error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(next.error!), backgroundColor: AppColors.error),
         );
@@ -240,7 +241,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const Text("Don't have an account?"),
                       TextButton(
                         onPressed: () {
-                          Navigator.pushNamed(context, '/register');
+                          Navigator.pushNamed(context, AppRoutes.register);
                         },
                         child: const Text('Sign Up'),
                       ),
